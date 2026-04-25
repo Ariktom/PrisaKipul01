@@ -1,0 +1,3073 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checklist System</title>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0A1A2F;
+      color: #fff;
+      font-family: "Segoe UI", Calibri, sans-serif;
+      direction: rtl;
+      font-weight: 500;
+    }
+
+    .screen { display: none; padding: 16px; }
+    .screen.active { display: block; }
+
+    .home-screen .btn-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .tile {
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 19px;
+      cursor: pointer;
+      color: #fff;
+      user-select: none;
+      position: relative;
+      height: 120px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .tile-blue   { background: linear-gradient(135deg,#0077ff,#00c6ff); }
+    .tile-orange { background: linear-gradient(135deg,#ff8a00,#ff5f00); }
+    .tile-green  { background: linear-gradient(135deg,#00c853,#009624); }
+    .tile-brown  { background: linear-gradient(135deg,#8d6e63,#5d4037); }
+    .tile-purple { background: linear-gradient(135deg,#8e24aa,#5e35b1); }
+    .tile-red    { background: linear-gradient(135deg,#d50000,#9b0000); }
+    .tile-cool1  { background: linear-gradient(135deg,#3ac7d1,#1e7a8a); }
+    .tile-cool2  { background: linear-gradient(135deg,#6ad1ff,#2a8ab8); }
+
+    .icon { font-size: 32px; margin-bottom: 6px; }
+
+    .shelter {
+      width: 26px;
+      height: 18px;
+      border-radius: 4px;
+      background: #2e7d32;
+      border: 2px solid #c8e6c9;
+      position: relative;
+      margin: 0 auto;
+    }
+    .shelter::before {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 14px;
+      right: 2px;
+      bottom: 2px;
+      background: #1b5e20;
+      border-radius: 2px;
+    }
+
+    .active-dot-tile {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+    .dot-active-red {
+      background: #ff1744;
+      box-shadow: 0 0 8px rgba(255,23,68,0.9);
+      animation: blink 1s infinite;
+    }
+    .dot-done-green {
+      background: #00e676;
+      box-shadow: 0 0 8px rgba(0,230,118,0.9);
+    }
+    .hidden { display: none; }
+
+    @keyframes blink {
+      0%,50% { opacity: 1; }
+      50.01%,100% { opacity: 0.2; }
+    }
+
+    .footer-bar {
+      margin-top: 20px;
+      background: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+      position: relative;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .footer-text {
+      color: #0057ff;
+      font-weight: 500;
+    }
+
+    .help-guide-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #0057ff;
+      background: #0057ff;
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      user-select: none;
+    }
+
+    .help-guide-btn:active {
+      transform: translateY(-50%) scale(0.94);
+    }
+
+    .shutdown-wrapper {
+      margin-top: 14px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .shutdown-btn {
+      min-width: 160px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      user-select: none;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #d50000, #7f0000);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+      transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.1s ease;
+    }
+
+    .shutdown-btn:active {
+      transform: scale(0.96);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      opacity: 0.9;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .toolbar-left,
+    .toolbar-center,
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+
+    /* Checklist top line: back, paper, lamp, clock field only */
+    .toolbar {
+      flex-wrap: nowrap;
+      row-gap: 0;
+    }
+
+    .toolbar-left,
+    .toolbar-center {
+      display: none !important;
+    }
+
+    .toolbar-right {
+      width: 100%;
+      display: flex;
+      direction: ltr;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: nowrap;
+    }
+
+    .toolbar-title {
+      font-weight: 700;
+      font-size: 20px;
+      white-space: nowrap;
+      color: #ffffff;
+      text-shadow: 0 0 4px rgba(0,0,0,0.9);
+    }
+
+
+    .toolbar-title {
+      display: none !important;
+    }
+
+    .mission-clock-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      direction: ltr;
+      margin-inline-start: 0;
+    }
+
+    .mission-clock-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      direction: rtl;
+      margin-top: 8px;
+      width: 100%;
+    }
+
+    .mission-command-line {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+      direction: rtl;
+      flex-wrap: nowrap;
+    }
+
+    .mission-command-line .commander-button,
+    .mission-command-line .reset-button {
+      height: 40px;
+      white-space: nowrap;
+    }
+
+    .mission-reset-line {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      margin: 0;
+      direction: rtl;
+    }
+
+    .mission-reset-line .reset-button {
+      height: 40px;
+    }
+
+    .mission-command-line #toolbar-status.status-label,
+    .mission-reset-line #toolbar-status.status-label {
+      position: static !important;
+      top: auto !important;
+      right: auto !important;
+      min-width: 74px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      color: #0a2a6a;
+      border: 2px solid #0a2a6a;
+      border-radius: 8px;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 8px;
+      direction: ltr;
+      box-shadow: none;
+    }
+
+    .mission-command-line #toolbar-status.status-label.hidden,
+    .mission-reset-line #toolbar-status.status-label.hidden {
+      display: none !important;
+    }
+
+    .mission-clock-field {
+      min-width: 96px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.14);
+      border: 2px solid rgba(255,255,255,0.45);
+      color: #ffffff;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-align: center;
+      line-height: 1;
+      box-shadow: inset 0 0 6px rgba(0,0,0,0.28);
+    }
+
+    .clock-toggle-btn,
+    .clock-reset-btn {
+      border-radius: 8px;
+      padding: 6px 10px;
+      min-width: 60px;
+      height: 34px;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    }
+
+    .clock-toggle-btn.start {
+      background: #00c853;
+      color: #ffffff;
+      border: 2px solid #b9ffcf;
+    }
+
+    .clock-toggle-btn.stop {
+      background: #d50000;
+      color: #ffffff;
+      border: 2px solid #ffb3b3;
+    }
+
+    .clock-reset-btn {
+      min-width: 38px;
+      width: 38px;
+      padding: 0;
+      background: #000000;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      font-size: 20px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .toolbar-icon-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: #fff;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+
+    .toolbar-lamp {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ff1744;
+      box-shadow: 0 0 8px rgba(255,23,68,0.9);
+      animation: blink 1s infinite;
+    }
+    .toolbar-lamp.done {
+      background: #00e676;
+      box-shadow: 0 0 8px rgba(0,230,118,0.9);
+      animation: none;
+    }
+
+    .collapsible {
+      background: #10233a;
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    .collapsible-header span {
+      display: inline-block;
+      transition: transform 0.25s ease;
+    }
+    .collapsible-header.open span {
+      transform: rotate(180deg);
+    }
+
+    .collapsible-body { margin-top: 10px; }
+
+    .commander-button {
+      background: linear-gradient(135deg, #ffd600, #c7a500);
+      color: #000;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .commander-off {
+      background: #b71c1c;
+      color: #fff;
+    }
+
+
+    .assign-extra {
+      direction: rtl;
+      text-align: right;
+    }
+
+.assign-btn {
+  background: #a5d6a7;        /* light green */
+  color: #0d3b0d;
+  border: 2px solid #2e7d32;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  margin: 4px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  transition: all 0.15s ease;
+}
+.assign-btn.active {
+  background: #ffeb3b;
+  color: #000;
+  border: 2px solid #000;
+  box-shadow: 0 0 10px rgba(255,235,59,0.9);
+}
+
+/* icon stays black but pops on yellow */
+.assign-btn.active .man-icon::before,
+.assign-btn.active .man-icon::after {
+  background: #000;
+}
+    .assign-clear-btn {
+  background: #81d4fa;
+  color: #111;
+  border: 2px solid #01579b;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  margin: 4px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  transition: transform 0.15s ease;
+}
+
+    .reset-button {
+      background: linear-gradient(135deg, #b71c1c, #7f0000);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .checklist-content {
+      margin-top: 10px;
+      height: calc(100vh - 190px);
+      overflow-y: scroll;
+      padding-bottom: 40px;
+      scrollbar-width: none;
+    }
+
+    .task-row {
+      background: #13263f;
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      display: grid;
+      grid-template-columns: auto auto 1fr auto;
+      gap: 8px;
+      align-items: flex-start;
+      font-size: 15px;
+    }
+
+    .task-row.highlight {
+      border: 2px solid #00e676;
+    }
+
+    .task-checkbox {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      transform: scale(1.2);
+      appearance: none;
+      -webkit-appearance: none;
+      background: #ffffff;
+      border: 2px solid #ffffff;
+      cursor: pointer;
+      position: relative;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    }
+
+    .task-checkbox:checked {
+      background: #00ff5a !important;
+      border-color: #00ff5a !important;
+      box-shadow: 0 0 0 3px rgba(0,255,90,0.28), 0 0 12px rgba(0,255,90,0.85) !important;
+    }
+
+    .task-checkbox:checked::after {
+      content: "✓";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -58%);
+      color: #003b16;
+      font-size: 17px;
+      font-weight: 1000;
+      line-height: 1;
+    }
+
+    .task-checkbox:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .task-checkbox:checked:disabled {
+      opacity: 1 !important;
+      filter: none !important;
+    }
+
+.task-checkbox.commander-visible {
+  opacity: 1 !important;
+  filter: brightness(1.25);
+}
+
+.task-checkbox.commander-checked-box {
+  opacity: 1 !important;
+}
+    .task-index-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .task-text {
+      font-size: 15px;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    .task-roles {
+      font-size: 13px;
+      opacity: 0.9;
+      min-width: 40px;
+      text-align: center;
+      margin-top: 2px;
+      padding: 2px 4px;
+      border-radius: 6px;
+      background: #1b3558;
+      border: 1px solid #4fc3f7;
+      cursor: pointer;
+    }
+
+    .separator-row {
+      border-bottom: 2px solid #ffd600;
+      margin: 10px 0;
+    }
+
+    .captain-row {
+      background: #ffeb3b;
+      color: #000;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 15px;
+      box-shadow: 0 0 10px rgba(255,235,59,0.5);
+    }
+
+.dialog-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+
+    .yl { background:#ffeb3b; color:#000; padding:0 2px; border-radius:2px; }
+
+    .role-banner {
+      margin-top: 6px;
+      background: rgba(255,255,255,0.12);
+      padding: 6px 10px;
+      border-radius: 8px;
+      display: none;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .role-banner button {
+      background: #d6f0ff;
+      color: #003b73;
+      border: 2px solid #4fc3f7;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .role-banner button.active {
+      background: yellow;
+      color: black;
+      border: 2px solid #000;
+    }
+
+    .paper-btn {
+      margin-left: 10px;
+      background: #ffffff;
+      color: #000;
+      border: 2px solid #000;
+      padding: 6px 10px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .dialog {
+      background: #fff;
+      color: #000;
+      padding: 20px;
+      border-radius: 10px;
+      min-width: 260px;
+      text-align: center;
+    }
+
+    .dialog-buttons {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    .dialog-buttons .confirm,
+    .dialog-buttons .cancel {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .dialog-buttons .confirm {
+      background: #4caf50;
+      color: #fff;
+    }
+
+    .dialog-buttons .cancel {
+      background: #f44336;
+      color: #fff;
+    }
+
+    .status-label {
+      position: absolute;
+      top: 6px;
+      right: 32px;
+      background: #ffffff;
+      color: #0a2a6a;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      min-width: 70px;
+      text-align: center;
+      border: 2px solid #0a2a6a;
+      z-index: 5;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  
+
+/* ===== CLEAN HOME TILE LAYOUT - STEP 2 ===== */
+.home-screen .btn-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.home-screen .tile {
+  position: relative;
+  height: 130px;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  color: #fff;
+  user-select: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+}
+
+.home-screen .tile .status-label {
+  position: absolute !important;
+  top: 8px !important;
+  left: 12px !important;
+  right: auto !important;
+  min-width: 60px !important;
+  width: 60px !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: rgba(0,0,0,0.25) !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  line-height: 18px !important;
+  text-align: center !important;
+  direction: ltr !important;
+  z-index: 4 !important;
+  box-shadow: none !important;
+}
+
+.home-screen .tile .active-dot-tile {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
+  left: auto !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  border: 2px solid #ffffff !important;
+  box-sizing: border-box !important;
+  z-index: 5 !important;
+}
+
+.home-screen .tile-icon {
+  margin-top: 22px;
+  font-size: 29px;
+  line-height: 1;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.75));
+  text-shadow:
+    0 0 3px rgba(0,0,0,0.75),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 0 2px rgba(255,255,255,0.55);
+}
+
+.home-screen .tile-title {
+  margin-top: 7px;
+  padding: 0 8px;
+  font-size: 18px;
+  line-height: 1.15;
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+}
+
+.home-screen .tile-shelter .tile-icon {
+  margin-top: 31px;
+}
+
+.home-screen .tile-shelter .tile-title {
+  margin-top: 10px;
+}
+
+.home-screen .tile .shelter {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
+}
+
+
+.home-screen .tile-clock-label {
+  position: absolute;
+  left: 50%;
+  bottom: 13px;
+  transform: translateX(-50%);
+  min-width: 82px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.55);
+  color: #ffffff;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 18px;
+  letter-spacing: 0.6px;
+  text-align: center;
+  direction: ltr;
+  z-index: 4;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.25);
+}
+
+  </style>
+</head>
+<body>
+
+<div id="screen-home" class="screen active home-screen">
+  <div class="btn-grid">
+
+    <div class="tile tile-blue" onclick="openChecklist('antenna-deploy','blue')">
+      <span class="status-label hidden" id="status-antenna-deploy"></span>
+      <span class="active-dot-tile hidden" id="dot-antenna-deploy"></span>
+      <div class="tile-icon">📡</div>
+      <div class="tile-title">פריסת אנטנה</div>
+    </div>
+
+    <div class="tile tile-orange" onclick="openChecklist('antenna-tear','orange')">
+      <span class="status-label hidden" id="status-antenna-tear"></span>
+      <span class="active-dot-tile hidden" id="dot-antenna-tear"></span>
+      <div class="tile-icon">📡</div>
+      <div class="tile-title">קיפול אנטנה</div>
+    </div>
+
+    <div class="tile tile-green tile-shelter" onclick="openChecklist('rcs-deploy','green')">
+      <span class="status-label hidden" id="status-rcs-deploy"></span>
+      <span class="active-dot-tile hidden" id="dot-rcs-deploy"></span>
+      <div class="tile-icon"><div class="shelter"></div></div>
+      <div class="tile-title">פריסת קרון</div>
+    </div>
+
+    <div class="tile tile-brown tile-shelter" onclick="openChecklist('rcs-tear','brown')">
+      <span class="status-label hidden" id="status-rcs-tear"></span>
+      <span class="active-dot-tile hidden" id="dot-rcs-tear"></span>
+      <div class="tile-icon"><div class="shelter"></div></div>
+      <div class="tile-title">קיפול קרון</div>
+    </div>
+
+    <div class="tile tile-purple" onclick="openChecklist('rps-deploy','purple')">
+      <span class="status-label hidden" id="status-rps-deploy"></span>
+      <span class="active-dot-tile hidden" id="dot-rps-deploy"></span>
+      <div class="tile-icon">⚡</div>
+      <div class="tile-title">פריסת מערכת כוח</div>
+    </div>
+
+    <div class="tile tile-red" onclick="openChecklist('rps-tear','red')">
+      <span class="status-label hidden" id="status-rps-tear"></span>
+      <span class="active-dot-tile hidden" id="dot-rps-tear"></span>
+      <div class="tile-icon">⚡</div>
+      <div class="tile-title">קיפול מערכת כוח</div>
+    </div>
+
+    <div class="tile tile-cool1" onclick="openChecklist('cooling-deploy','cool1')">
+      <span class="status-label hidden" id="status-cooling-deploy"></span>
+      <span class="active-dot-tile hidden" id="dot-cooling-deploy"></span>
+      <div class="tile-icon">❄️</div>
+      <div class="tile-title">פריסת מערכת קירור</div>
+    </div>
+
+    <div class="tile tile-cool2" onclick="openChecklist('cooling-tear','cool2')">
+      <span class="status-label hidden" id="status-cooling-tear"></span>
+      <span class="active-dot-tile hidden" id="dot-cooling-tear"></span>
+      <div class="tile-icon">❄️</div>
+      <div class="tile-title">קיפול מערכת קירור</div>
+    </div>
+
+  </div>
+
+  <div class="footer-bar">
+    <button id="btn-user-guide" class="help-guide-btn" title="מדריך משתמש">?</button>
+    <div class="footer-text">Build Version: 1.0.1</div>
+  </div>
+
+  <div class="shutdown-wrapper">
+    <button id="btn-shutdown-all" class="shutdown-btn">RESET ALL</button>
+  </div>
+</div>
+
+<div id="screen-checklist" class="screen">
+  <div id="toolbar" class="toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-title" id="toolbar-title"></div>
+      <div id="toolbar-assign" class="assign-buttons-toolbar"></div>
+    </div>
+
+    <div class="toolbar-center"></div>
+
+    <div class="toolbar-right">
+      <button class="toolbar-icon-btn" onclick="goHome()" title="חזרה">◀</button>
+      <button id="btn-paper-list" class="paper-btn">📄</button>
+      <div id="toolbar-lamp" class="toolbar-lamp hidden"></div>
+      <div class="mission-clock-wrap" id="mission-clock-wrap">
+        <div id="mission-clock" class="mission-clock-field">00:00:00</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="role-banner" class="role-banner" style="display:none;"></div>
+
+  <div class="collapsible">
+    <div class="collapsible-header" onclick="toggleCollapsible()">
+      <span>⌄</span>
+    </div>
+
+    <div id="collapsible-body" class="collapsible-body">
+      <div class="mission-command-line">
+        <button id="btn-commander" class="commander-button commander-off">מפקד</button>
+        <button class="reset-button" id="btn-reset">RESET MISSION</button>
+        <div id="toolbar-status" class="status-label hidden"></div>
+      </div>
+      <div id="role-buttons" style="display:none;"></div>
+
+<div id="assign-extra" class="assign-extra">
+  <button class="assign-btn" onclick="applyAssign(4)">
+    <span class="man-icon"></span> 4
+  </button>
+  <button class="assign-btn" onclick="applyAssign(6)">
+    <span class="man-icon"></span> 6
+  </button>
+  <button class="assign-btn" onclick="applyAssign(8)">
+    <span class="man-icon"></span> 8
+  </button>
+  <button class="assign-clear-btn" onclick="clearAssignAllForCurrent()">X</button>
+</div>
+
+<div class="mission-clock-controls" id="mission-clock-controls">
+  <button id="btn-clock-toggle" class="clock-toggle-btn start">START</button>
+  <button id="btn-clock-reset" class="clock-reset-btn" title="Reset clock">↻</button>
+</div>
+
+    </div>
+  </div>
+
+  <div id="checklist-content" class="checklist-content"></div>
+</div>
+
+<div id="reset-dialog" class="dialog-backdrop">
+  <div class="dialog">
+    <div>האם לאפס את המשימה?</div>
+    <div class="dialog-buttons">
+      <button class="confirm" onclick="confirmReset()">כן</button>
+      <button class="cancel" onclick="cancelReset()">לא</button>
+    </div>
+  </div>
+</div>
+
+<div id="reset-all-dialog" class="dialog-backdrop">
+  <div class="dialog">
+    <div>האם לאפס את כל המשימות?</div>
+    <div class="dialog-buttons">
+      <button class="confirm" onclick="confirmResetAll()">כן</button>
+      <button class="cancel" onclick="cancelResetAll()">לא</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var firebaseConfig = {
+    apiKey: "AIzaSyAZTvdQ2Qzs_LMTq9xqQKMeqTrsf__jZHM",
+    authDomain: "prisakipul01.firebaseapp.com",
+    databaseURL: "https://prisakipul01-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "prisakipul01",
+    storageBucket: "prisakipul01.firebasestorage.app",
+    messagingSenderId: "161180371008",
+    appId: "1:161180371008:web:37d5df07942a17206fb7a5"
+  };
+
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  var db = firebase.database();
+
+  function dbRef(path) {
+    return db.ref(path);
+  }
+  function dbSet(refOrPath, value) {
+    if (typeof refOrPath === 'string') refOrPath = dbRef(refOrPath);
+    return refOrPath.set(value);
+  }
+  function dbUpdate(refOrPath, value) {
+    if (typeof refOrPath === 'string') refOrPath = dbRef(refOrPath);
+    return refOrPath.update(value);
+  }
+  function dbRemove(refOrPath) {
+    if (typeof refOrPath === 'string') refOrPath = dbRef(refOrPath);
+    return refOrPath.remove();
+  }
+
+  const checklists = {
+    "antenna-deploy": {
+      title: "פריסת אנטנה",
+      steps: [
+        { type:"captain", text:"בצע תדריך בטיחות" },
+        { type:"captain", text:"הגדר מיקום פריסה בהתחשב במיקום RPS ו-LRCU" },
+        { type:"step", text:"כוון את המשאית אל מיקום הפריסה" },
+        { type:"separator" },
+        { type:"step", text:"שחרר את נעילת הפדסטאל מהמשאית" },
+        { type:"step", text:"שחרר את נעילת עמודי התמיכה" },
+        { type:"step", text:"הבא משטחי פיזור לחץ מפלטפורמת מערכת הקירור ומקם תחת כל רגל" },
+        { type:"step", text:"הסר פלטות קרקע מהפדסטאל וחבר לכל רגל" },
+        { type:"step", text:"הוצא את שלט הפילוס" },
+        { type:"step", text:"הרם את מפסק קופסת המצברים" },
+        { type:"separator" },
+        { type:"step", text:"הפעל את שלט הפילוס" },
+        { type:"separator" },
+        { type:"step", text:"שלט פילוס: ודא שכל הרגליים בגבול עליון. אם לא, תקן בהתאם" },
+        { type:"captain", text:"ודא שכל נועלי הפדסטאל פתוחים" },
+        { type:"separator" },
+        { type:"step", text:`שלט פילוס: <span class="yl">Enable</span> + Ground Start. בזמן ירידת הרגליים התאם את מיקום משטחי פיזור הלחץ` },
+        { type:"separator" },
+        { type:"step", text:"שלט פילוס: Height Up. הרם את הפדסטאל לגובה המאפשר להוציא את המשאית" },
+        { type:"separator" },
+        { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+        { type:"step", text:"כוון לאט את המשאית ליציאה" },
+        { type:"separator" },
+        { type:"step", text:"שלט פילוס: Height Down. הורד את הפדסטאל לגובה עבודה" },
+        { type:"separator" },
+        { type:"captain", text:"ודא ש-RPS פועלת ו-LRCU פרוסה" },
+        { type:"step", text:"RPS: ודא מתגי AC ו-DC במצב כבוי" },
+        { type:"separator" },
+        { type:"step", text:"חבר שני צינורות מ-LRCU לפדסטאל. אבטח כל חיבור בעזרת פין פציל" },
+        { type:"step", text:"חבר כבל הארקה משותפת" },
+        { type:"step", text:"חבר שלושה כבלי מתח אל PDB1" },
+        { type:"step", text:"הכנס מוט הארקה לקרקע וחבר כבל הארקה בין המוט לאנטנה" },
+        { type:"separator" },
+        { type:"step", text:"RPS: העבר קודם את מתג AC למצב ON, אח\"כ מתג DC למצב ON" },
+        { type:"separator" },
+        { type:"step", text:"LRCU: העבר מפסק ראשי למצב אנכי" },
+        { type:"separator" },
+        { type:"step", text:"LRCU: העבר מפסק 24V למצב ON" },
+        { type:"separator" },
+        { type:"step", text:"LRCU: העבר מפסק LOCAL/REMOTE למצב LOCAL" },
+        { type:"separator" },
+        { type:"step", text:"LRCU: לחץ על כפתור START" },
+        { type:"captain", text:"ודא ש-LRCU פועלת" },
+        { type:"step", text:"קופסת בקרה: העבר מפסק ANT LOCAL/ANT REMOTE למצב ANT LOCAL" },
+        { type:"step", text:"קופסת בקרה: העבר מפסק PED למצב PED ENABLE" },
+        { type:"separator" },
+        { type:"step", text:"קופסת בקרה: הרם והחזק את מפסק ANTENNA UP. שחרר מפסק עם תחילת תנועה של האנטנה" },
+        { type:"separator" },
+        { type:"step", text:`שלט פילוס: <span class="yl">Enable</span> + Level Start. שחרר מפסקים עם תחילת תנועה` },
+        { type:"separator" },
+        { type:"step", text:"Loadcell: בדוק איזון משקל, תקן אם נדרש" },
+        { type:"separator" },
+        { type:"step", text:"שלט פילוס: בדוק שדות ROLL ו-PITCH. אם אינם ירוקים, בצע פילוס אוטומטי שוב" },
+        { type:"step", text:"כבה שלט פילוס והחזר למקום" },
+        { type:"step", text:"הוצא פין אפס והכנס אל המחזיק" },
+        { type:"step", text:"שחרר את הסולם מהפדסטאל ופרוס אותו" },
+        { type:"step", text:"RPS: העבר מפסקי AC ו-DC למצב PRCU" },
+        { type:"step", text:"LRCU: העבר מפסק LOCAL/REMOTE למצב REMOTE" },
+        { type:"step", text:"קופסת בקרה: העבר את מפסק TX למצב ENABLE" },
+        { type:"separator" },
+        { type:"step", text:"קופסת בקרה: העבר מפסק ANT LOCAL/ANT REMOTE למצב ANT REMOTE" }
+      ]
+    },
+    "antenna-tear":   { title: "קיפול אנטנה", steps: [
+    { type:"captain", text:"ודא ש-CU וספקים כובו ב-OWS" },
+    { type:"captain", text:"תדריך בטיחות ומוכנות לקיפול" },
+
+    { type:"step", text:"קופסת בקרה: העבר מפסק בורר מקום שליטה ל-ANT LOCAL" },
+    { type:"separator" },
+
+    { type:"step", text:"RPS: העבר מפסק AC למצב ON ואח\"כ מפסק DC למצב ON" },
+    { type:"step", text:"קופסת בקרה: העבר את מפסק שליטה בשידור למצב DISABLE TX" },
+    { type:"step", text:"קופסת בקרה: ודא שמפסק שליטה בפדסטאל במצב PEDESTAL ENABLE" },
+    { type:"step", text:"קופסת בקרה: ודא שכל החיוויים תקינים" },
+    { type:"step", text:"קפל את הסולם, ונעל על גבי הפדסטאל" },
+    { type:"separator" },
+
+    { type:"step", text:"ודא שהמערכת במצב סגירה. אם לא, תקן בעזרת מפסקי CW/CCW" },
+    { type:"separator" },
+
+    { type:"step", text:"הכנס פין אפס" },
+    { type:"step", text:"הרם את מפסק קופסת המצברים" },
+    { type:"step", text:"הוצא את שלט הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"הפעל את שלט הפילוס" },
+    { type:"step", text:"Loadcell: ודא שהפדסטאל מפולס, תקן אם נדרש" },
+    { type:"separator" },
+
+    { type:"step", text:"LRCU: העבר מפסק LOCAL/REMOTE למצב LOCAL" },
+    { type:"separator" },
+
+    { type:"step", text:"LRCU: לחץ על כפתור START" },
+    { type:"separator" },
+
+    { type:"step", text:"קופסת בקרה: הרם והחזק את מפסק ANTENNA DOWN. שחרר מפסק עם תחילת תנועה של האנטנה" },
+    { type:"captain", text:"הצב צופה לעמוד התמיכה המרוחק, תדרך את שני המפעילים לשמור על קשר עין ולשחרר את המפסק בעת מגע של האנטנה עם עמודי התמיכה בשני הצדדים" },
+    { type:"separator" },
+
+    { type:"step", text:"קופסת בקרה: הרם והחזק את מפסק ANTENNA DOWN. המשך להחזיק עד ירידה מלאה של האנטנה" },
+    { type:"separator" },
+
+    { type:"step", text:"LRCU: לחץ על כפתור STOP" },
+    { type:"separator" },
+
+    { type:"step", text:"LRCU: העבר מפסק 24V למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"RPS: העבר את מתג DC למצב OFF ואח\"כ את מתג AC למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק שני צינורות קירור מהפדסטאל" },
+    { type:"step", text:"נתק כבל הארקה משותפת" },
+    { type:"step", text:"נתק כבל הארקה ממוט ההארקה ומהאנטנה, שלוף את המוט והחזר יחד עם הכבל לאחסון ב-RPS" },
+    { type:"step", text:"נתק כבל מתח מערכת קירור מ-PDB1" },
+    { type:"step", text:"נתק שלושה כבלי מתח מ-PDB1" },
+    { type:"separator" },
+
+    { type:"step", text:"שלט פילוס: Height Up. הרם את הפדסטאל לגובה המאפשר להכניס את המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את שני המכוונים, הדגש את נושא התקשורת עם הנהג. המהירות לא תעלה על 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית לכניסה מתחת לפדסטאל" },
+    { type:"separator" },
+
+    { type:"step", text:"שלט פילוס: Height Down. הורד את הפדסטאל אל המשאית. המשך להחזיק עד שהרגליים עולות" },
+    { type:"separator" },
+
+    { type:"step", text:"נעל את הפדסטאל למשאית" },
+    { type:"captain", text:"ודא נעילה תקינה בכל ארבע הפינות" },
+
+    { type:"step", text:"נעל את נעילת עמודי התמיכה" },
+    { type:"step", text:"הסר פלטות קרקע מכל רגל ונעל במגש המתאים על גבי הפדסטאל" },
+    { type:"step", text:"אסוף את משטחי פיזור הלחץ ונעל על גבי פלטפורמת מערכת הקירור" },
+    { type:"step", text:"שלט הפילוס: ודא שכל הרגליים בגבול עליון. אם לא – תקן בהתאם" },
+    { type:"separator" },
+
+    { type:"step", text:"כבה שלט פילוס והחזר למקום" },
+    { type:"separator" },
+
+    { type:"step", text:"הורד את מפסק קופסת המצברים" }
+  ] },
+    "rcs-deploy":     { title: "פריסת קרון", steps: [{ type:"captain", text:"בצע תדריך בטיחות" },
+    { type:"captain", text:"הגדר מיקום פריסה בהתחשב במיקום RPS" },
+
+    { type:"step", text:"כוון את המשאית אל מיקום הפריסה" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר את נעילת הפלטפורמה מהמשאית" },
+    { type:"captain", text:"ודא שכל נועלי הפלטפורמה פתוחים" },
+
+    { type:"step", text:"הבא משטחי פיזור לחץ מפלטפורמת מערכת הקירור ומקם תחת כל רגל" },
+    { type:"step", text:"הבא מוט וכבל הארקה מ-RPS וחבר הארקה לקרון" },
+    { type:"step", text:"משוך בכבל הנעילה של כל רגל, הצב בניצב למערכת וודא נעילה" },
+    { type:"step", text:"הסר פלטת קרקע מצד כל רגל וחבר אל הרגל" },
+    { type:"separator" },
+
+    { type:"step", text:"היכנס אל הקרון והוצא את שלט הפילוס מארון האחסנה" },
+    { type:"step", text:"במסד כוח הרם את מפסקי BATTERY SET 1 + 2" },
+    { type:"step", text:"על לוח החשמל הראשי העבר את מפסק CB32 למצב ON" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר את שלט הפילוס לתיבת בקרת הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"הדלק את תיבת בקרת הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"סובב את כפתור ההדלקה של שלט הפילוס CCW והעבר את בורר המצבים למצב 0°" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור הרמה עד שהרגליים נוגעות בקרקע והקרון עולה, עד לגובה המאפשר הוצאת המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית ליציאה" },
+    { type:"step", text:"לחץ על כפתור הורדה עד שהקרון יורד עד הסוף. עם עצירת תנועה עזוב את הכפתור – מתבצע פילוס אוטומטי" },
+    { type:"separator" },
+
+    { type:"step", text:"כבה את תיבת בקרת הפילוס" },
+    { type:"step", text:"נתק את שלט הפילוס מתיבת בקרת הפילוס והחזר אל ארון האחסון בקרון" },
+    { type:"step", text:"שחרר את בורג הפרפרית המצמיד את המצלמה לרצפה בין הארון לדופן האחסון, והוצא את המצלמה" },
+    { type:"step", text:"חתוך את אזיקון האבטחה מכבל בקרת מערכת כוח ופרוס אל מערכת הכוח" },
+    { type:"step", text:"חתוך את אזיקון האבטחה מכבל נתונים אופטי של מערכת כוח ופרוס אל מערכת הכוח" },
+    { type:"step", text:"חתוך את אזיקון האבטחה מכבל תקשורת מכ\"ם אופטי, פרוס וחבר אל האנטנה" },
+    { type:"step", text:"פתח את ברזנט המכסה את תוף כבל המתח, חתוך את אזיקון האבטוח ושחרר את הכבל" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור הפעלת מתח ממצברים" },
+    { type:"step", text:"חבר את כבל בקרת מערכת כוח אל J5P על מערכת הכוח ואל J14 על פאנל תקשורת" },
+    { type:"step", text:"שחרר כיסאות בעמדת המפעיל" },
+    { type:"step", text:"פרוס מקלדות ועכברים" },
+    { type:"step", text:"חבר את כבל נתונים אופטי של מערכת כוח אל J6P על מערכת הכוח ואל J13 על פאנל התקשורת" },
+    { type:"step", text:"חבר את כבל תקשורת מכ\"ם אופטי אל J51 על הפדסטאל ואל J12 על פאנל תקשורת" },
+    { type:"step", text:"חבר את המצלמה אל הזרוע הטלסקופית וחבר את הכבל החשמלי על המחבר שמתחתיה" },
+    { type:"step", text:"שחרר והרם את הזרוע הטלסקופית" },
+    { type:"step", text:"על תיבת בקרת התוף, לחץ על כפתור FORWARD ופרוס את כבל המתח לכיוון מערכת הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר את כבל המתח אל J2 בתא חיבורי האספקות" },
+    { type:"separator" },
+
+    { type:"step", text:"ודא במערכת הכוח שנורית אדומה 2H11 שמציינת ניתוק מתח לקרון דולקת. אם לא, לחץ על כפתור 1SC11" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר את כבל המתח אל J11P במערכת הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור SC11 לחיבור מתח לקרון" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח המתחים, העבר את מפסק SW1 למצב גנראטור" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח החשמל הראשי, העבר את בורר ההזנות למצב 1 – מתח מגובה" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח החשמל הראשי, הרם את מפסק CB1" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח החשמל הראשי, הרם את מפסק CB5" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח החשמל הראשי, הרם את מפסק CB27" },
+    { type:"separator" },
+
+    { type:"step", text:"על לוח החשמל הראשי, לחץ על כפתור S4" },
+    { type:"separator" },
+
+    { type:"step", text:"הרם את כל המפסקים בלוח החשמל הראשי" },
+    { type:"separator" },
+
+    { type:"step", text:"הרם את כל המפסקים במסד הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"הרם את כל המפסקים במסד המחשבים" },
+    { type:"separator" },
+
+    { type:"step", text:"על פאנל PRCU העבר את מתג AC למצב ON" },
+    { type:"separator" },
+
+    { type:"step", text:"על פאנל PRCU העבר את מתג DC למצב ON" }] },
+    "rcs-tear":       { title: "קיפול קרון", steps: [{ type:"captain", text:"בצע תדריך בטיחות" },
+
+    { type:"step", text:"על פאנל PRCU, העבר את מתג DC למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"על פאנל PRCU, העבר את מתג AC למצב OFF" },
+    { type:"captain", text:"ודא ש-OWS לא נדרש לאנטנה" },
+
+    { type:"step", text:"לחץ על צלמית כיבוי המחשבים והמתן לכיבוי מלא" },
+    { type:"step", text:"הורד זרוע טלסקופית ונתק מצלמה וכבל, נעל את הזרוע" },
+    { type:"step", text:"נתק כבל אופטי של אנטנה" },
+    { type:"step", text:"נתק כבל בקרת כוח ממערכת כוח וקרון וגלול על התוף" },
+    { type:"step", text:"נתק כבל נתונים אופטי כוח ממערכת כוח וקרון וגלול על התוף" },
+    { type:"step", text:"נעל כיסאות" },
+    { type:"step", text:"אחסן מקלדות ועכברים" },
+    { type:"separator" },
+
+    { type:"step", text:"הכנס את המצלמה לקרון, נעל במקום בין ארון האחסון לדופן הקרון" },
+    { type:"step", text:"הורד את כל המפסקים במסד המחשבים" },
+    { type:"separator" },
+
+    { type:"step", text:"הורד את כל המפסקים במסד הכוח למעט BATTERY SET 1 + 2" },
+    { type:"step", text:"הורד את כל המפסקים על לוח החשמל הראשי למעט מפסק CB32" },
+    { type:"separator" },
+
+    { type:"step", text:"הוצא את שלט הפילוס מארון האחסנה וחבר אל תיבת בקרת הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"הדלק את תיבת בקרת הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"סובב את כפתור ההדלקה של שלט הפילוס CCW והעבר את בורר המצבים למצב 0°" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור הרמה עד שהקרון עולה עד לגובה המאפשר הכנסת המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את שני המכוונים, הדגש את נושא התקשורת עם הנהג. המהירות לא תעלה על 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית לכניסה" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור הורדה עד שהקרון יורד על פלטפורמת המשאית" },
+    { type:"separator" },
+
+    { type:"step", text:"נעל את הקרון אל המשאית" },
+    { type:"captain", text:"ודא נעילה תקינה בכל ארבע הפינות" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור כיבוי שלט הפילוס, נתק אותו מתיבת הבקרה והחזר לאחסון בקרון" },
+    { type:"step", text:"כבה את תיבת בקרת הפילוס" },
+    { type:"separator" },
+
+    { type:"step", text:"במערכת הכוח, לחץ על כפתור 1SC11 לניתוק מתח מהקרון" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק את כבל המתח מהקרון וממערכת הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"הכנס את כבל המתח אל התוף" },
+    { type:"step", text:"נתק את כבל ההארקה, שלוף את המוט מהקרקע והחזר לאחסון במערכת הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור הפעלת מתח ממצברים" },
+    { type:"separator" },
+
+    { type:"step", text:"על תיבת בקרת התוף, לחץ על כפתור REVERSE וגלול את כבל המתח על התוף" },
+    { type:"separator" },
+
+    { type:"step", text:"אבטח את הכבל עם אזיקון והדק את ברזנט כיסוי התוף" },
+    { type:"separator" },
+
+    { type:"step", text:"במסד הכוח הורד את מפסקי BATTERY SET 1 + 2" },
+    { type:"separator" },
+
+    { type:"step", text:"בלוח החשמל הראשי הורד את מפסק CB32" },
+    { type:"step", text:"נעל את מחיצת הזכוכית" },
+    { type:"step", text:"צא מהקרון וסגור היטב את הדלת" },
+    { type:"captain", text:"ודא שהדלת נעולה היטב" }] },
+    "rps-deploy":     { title: "פריסת מערכת כוח", steps: [
+    { type:"captain", text:"בצע תדריך בטיחות" },
+    { type:"captain", text:"הגדר מיקום פריסה בהתחשב במיקום אנטנה" },
+
+    { type:"step", text:"כוון את המשאית אל מיקום הפריסה" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר את נעילת הפלטפורמה מהמשאית" },
+    { type:"captain", text:"בדוק שכל הנועלים פתוחים" },
+
+    { type:"step", text:"שחרר ידיות המייצבים, משוך החוצה וודא נעילה" },
+    { type:"step", text:"שלוף משטחי פיזור לחץ ופלטות קרקע מתחת לפלטפורמה ומקם תחת כל רגל" },
+    { type:"separator" },
+
+    { type:"step", text:"הוצא את פיני הנעילה, הוצא את המפרק הפנימי מכל רגל ונעל באמצעות פיני הנעילה" },
+    { type:"step", text:"שחרר את ידיות פריסת הרגליים והצב במצב סיבוב" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את הצוות לגבי הרמה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+    { type:"captain", text:"הנחה את הצוות לבדוק מה כיוון ההרמה" },
+
+    { type:"step", text:"הורד את הרגליים לקרקע והרם את הפלטפורמה לגובה שיאפשר הוצאת המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית ליציאה" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את הצוות לגבי הורדה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+    { type:"captain", text:"הנחה את הצוות לבדוק מה כיוון ההורדה" },
+
+    { type:"step", text:"הורד את הפלטפורמה לגובה עבודה וודא פילוס" },
+    { type:"step", text:"הסר את כבל הארקה משותפת, חבר למערכת כוח ופרוס לאנטנה" },
+    { type:"step", text:"פתח את מכסה עומס הדמה" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר ופרוס את הסולם" },
+    { type:"separator" },
+
+    { type:"step", text:"בדוק את מד הדלק" },
+    { type:"step", text:"הוצא מוט וכבל הארקה, וחבר למערכת הכוח" },
+    { type:"separator" },
+
+    { type:"step", text:"סובב ידית מצבר גנרטור למצב BATTERY CONNECT" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור אצבע וודא הופעת כתובית Manual Mode על המסך" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על הכפתור הירוק להפעלת הגנרטור" },
+    { type:"separator" },
+
+    { type:"step", text:"פתח דלת ארון AC והרם את מפסק מטען מצברים" },
+    { type:"separator" },
+
+    { type:"step", text:"פתח דלת ארון DC ולחץ על כפתור SDC" },
+    { type:"separator" },
+
+    { type:"step", text:"העבר מפסק SGR למצב NON GROUND" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור SF1C לחיבור מתח הגנרטור למערכת" },
+    { type:"separator" },
+
+    { type:"step", text:"העבר מפסקי מזגנים למצב COOL" },
+    { type:"separator" },
+
+    { type:"step", text:"בדוק את מד הדלק על מסך התצוגה, ודא שיש לפחות 30% מיכל" },
+    { type:"step", text:"הסר ברזנט מעל תוף כבלי DC, הפעל את פאנל הבקרה, חתוך אזיקוני אבטוח ופרוס את הכבלים אל האנטנה" },
+    { type:"step", text:"הסר ברזנט מעל תוף כבלי AC, הפעל את פאנל הבקרה, חתוך אזיקון אבטוח, ופרוס את הכבל אל האנטנה" },
+    { type:"separator" },
+
+    { type:"step", text:"ודא על דלת ארון DC שמפסקי AC + DC במצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר כבל DC+ (ירוק) אל J3P" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר כבל DC- (אפור) אל J4P" },
+    { type:"step", text:"חבר כבל AC (שחור) אל J1P" },
+    { type:"separator" },
+
+    { type:"step", text:"העבר מפסק AC ואחר כך מפסק DC למצב ON" }
+  ] },
+    "rps-tear":       { title: "קיפול מערכת כוח", steps: [
+    { type:"captain", text:"בצע תדריך בטיחות" },
+    { type:"captain", text:"ודא שאנטנה, קרון ומערכת קירור אינם זקוקים למערכת כוח" },
+
+    { type:"step", text:"העבר מפסק DC ואחר כך מפסק AC למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק את כבל AC (שחור)" },
+    { type:"step", text:"נתק את כבל DC- (אפור)" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק את כבל DC+ (ירוק)" },
+    { type:"separator" },
+
+    { type:"step", text:"גלול את כבלי DC, אבטח כל כבל עם אזיקון" },
+    { type:"step", text:"גלול את כבל AC, אבטח אותו עם אזיקון" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור SF10 לניתוק מתח הגנרטור מהמערכת" },
+    { type:"separator" },
+
+    { type:"step", text:"פתח דלת ארון AC והורד את מפסק מטען מצברים" },
+    { type:"separator" },
+
+    { type:"step", text:"סובב ידית מצבר גנרטור למצב BATTERY DISCONNECT" },
+    { type:"separator" },
+
+    { type:"step", text:"לחץ על כפתור כיבוי (אדום) לכיבוי הגנרטור" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק את כבל הארקה משותפת ממערכת כוח ומהאנטנה וגלול אותו על התוף" },
+    { type:"captain", text:"הזהר את הצוות שמכסה עומס דמה עלול להיות חם" },
+
+    { type:"step", text:"קפל ונעל את מכסה עומס דמה" },
+    { type:"step", text:"נתק את כבל ההארקה, שלוף את המוט מהקרקע והחזר לאחסון" },
+    { type:"separator" },
+
+    { type:"step", text:"קפל ונעל את הסולם" },
+    { type:"separator" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק מה כיוון ההרמה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הרמה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הרם את הפלטפורמה לגובה שיאפשר הכנסת המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית לכניסה מתחת לפלטפורמה" },
+    { type:"separator" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק מה כיוון ההורדה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הורדה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הורד את הפלטפורמה אל המשאית" },
+    { type:"separator" },
+
+    { type:"step", text:"נעל את הפלטפורמה אל המשאית" },
+    { type:"captain", text:"בדוק שכל הנועלים נעולים כנדרש" },
+
+    { type:"step", text:"הרם את הרגליים עד הסוף" },
+    { type:"separator" },
+
+    { type:"step", text:"הוצא את פיני הנעילה, הכנס את המפרק הפנימי לכל רגל ונעל באמצעות פיני הנעילה" },
+    { type:"step", text:"אסוף את פלטות הקרקע ונעל מתחת לפלטפורמה" },
+    { type:"step", text:"אסוף את משטחי פיזור הלחץ ונעל מתחת לפלטפורמה" },
+    { type:"separator" },
+
+    { type:"step", text:"נעל את ידיות פריסת הרגליים" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר ידיות המייצבים, דחוף פנימה וודא נעילה" }
+  ] },
+    "cooling-deploy": { title: "פריסת מערכת קירור", steps: [
+    { type:"captain", text:"בצע תדריך בטיחות" },
+    { type:"captain", text:"הגדר מיקום פריסה בהתחשב במיקום אנטנה" },
+
+    { type:"step", text:"כוון את המשאית אל מיקום הפריסה" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר את נעילת הפלטפורמה מהמשאית" },
+    { type:"captain", text:"ודא שכל נועלי הפלטפורמה פתוחים" },
+
+    { type:"step", text:"הוצא משטחי פיזור לחץ ומקם תחת כל רגל" },
+    { type:"step", text:"הסר פלטות קרקע מהפלטפורמה וחבר לכל רגל" },
+    { type:"step", text:"שחרר את ידיות פריסת הרגליים והצב במצב סיבוב" },
+    { type:"step", text:"הוצא את פיני הנעילה, הוצא את המפרק הפנימי מכל רגל ונעל באמצעות פיני הנעילה" },
+    { type:"step", text:"הורד את הסולם מהפלטפורמה, פרוס והתקן אותו" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק את כיוון ההרמה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הרמה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הורד את הרגליים לקרקע והרם את הפלטפורמה לגובה שיאפשר הוצאת המשאית" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית ליציאה" },
+    { type:"separator" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק את כיוון ההורדה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הורדה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הורד את הפלטפורמה לגובה עבודה" },
+    { type:"captain", text:"בדוק על הפלס שהפלטפורמה מפולסת, הנחה את הצוות לתקן אם נדרש" },
+    { type:"separator" },
+
+    { type:"step", text:"שחרר את נעילת תוף כבל הבקרה, וחתוך את אזיקון האבטוח" },
+    { type:"step", text:"התקן את ידית סיבוב תוף כבל המתח, שחרר את הנעילה וחתוך את אזיקון האבטוח" },
+    { type:"step", text:"שחרר את רצועות האבטוח של שני צינורות הקירור מהתופים על גבי הפלטפורמה" },
+    { type:"step", text:"חבר הארקה למערכת הקירור" },
+    { type:"separator" },
+
+    { type:"step", text:"סובב את תוף כבל הבקרה עד להסרת הכבל מהתוף" },
+    { type:"step", text:"סובב את תוף כבל המתח עד להסרת הכבל מהתוף" },
+    { type:"separator" },
+
+    { type:"step", text:"RPS: העבר מתג DC למצב OFF ואח\"כ העבר מתג AC למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"חבר את כבל הבקרה אל J2 על מערכת הקירור ואל המחבר ליד קופסת הבקרה על פדסטאל האנטנה" },
+    { type:"step", text:"חבר את כבל המתח אל J1 על מערכת הקירור ואל המחבר על PDB1" },
+    { type:"step", text:"חבר את צינורות הקירור אל המחברים על הפדסטאל" },
+    { type:"separator" },
+
+    { type:"step", text:"אבטח את מהדקי הצינורות בעזרת אזיקונים" },
+    { type:"separator" },
+
+    { type:"step", text:"RPS: העבר מתג AC למצב ON ואח\"כ העבר מתג DC למצב ON" },
+    { type:"separator" },
+
+    { type:"captain", text:"ודא שצינורות נוזל הקירור מחוברים ומאובטחים היטב" },
+
+    { type:"step", text:"פתח את שסתומי זרימת הנוזל על LRCU ועל הפדסטאל" },
+    { type:"separator" },
+
+    { type:"step", text:"העבר את המפסק הראשי למצב ON (מאונך)" },
+    { type:"separator" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, העבר מפסק 24V למצב ON" },
+    { type:"separator" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, העבר מפסק LOCAL/REMOTE למצב LOCAL" },
+    { type:"separator" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, לחץ על כפתור START" },
+    { type:"separator" },
+
+    { type:"captain", text:"תן למערכת לפעול 15 דקות, אח\"כ ודא על מסך התצוגה שהלחץ הוא 25 PSI. אם חסר לחץ, הנחה את הצוות להוסיף נוזל קירור מהמיכל הרזרבי" },
+    { type:"captain", text:"ודא שהאנטנה הוזקפה" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, העבר מפסק LOCAL/REMOTE למצב REMOTE" }
+  ] },
+    "cooling-tear":   { title: "קיפול מערכת קירור", steps: [
+    { type:"captain", text:"בצע תדריך בטיחות" },
+    { type:"captain", text:"ודא שהאנטנה מקופלת" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, העבר מפסק LOCAL/REMOTE למצב LOCAL" },
+    { type:"separator" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, לחץ על כפתור STOP" },
+    { type:"separator" },
+
+    { type:"step", text:"בפאנל לוח הבקרה, העבר מפסק 24V למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"העבר את המפסק הראשי למצב OFF (מאוזן)" },
+    { type:"separator" },
+
+    { type:"step", text:"סגור את שסתומי זרימת הנוזל" },
+    { type:"separator" },
+
+    { type:"step", text:"RPS: העבר מתג DC למצב OFF ואח\"כ העבר מתג AC למצב OFF" },
+    { type:"separator" },
+
+    { type:"step", text:"חתוך את אזיקוני האבטוח ונתק את שני הצינורות" },
+    { type:"separator" },
+
+    { type:"step", text:"נתק את כבל המתח ממערכת הקירור ומ-PDB1" },
+    { type:"step", text:"נתק את כבל הבקרה ממערכת הקירור ומהאנטנה" },
+    { type:"step", text:"נתק את כבל ההארקה והחזר אל מקום האחסון ב-RPS" },
+    { type:"step", text:"קפל את הסולם ונעל אותו אל הפלטפורמה" },
+    { type:"separator" },
+
+    { type:"step", text:"גלול את כבל הבקרה על התוף ואבטח באזיקון, נעל את התוף" },
+    { type:"step", text:"התקן ידית סיבוב על תוף כבל המתח, גלול את הכבל על התוף ואבטח באזיקון. נעל את התוף" },
+    { type:"step", text:"גלגל את הצינורות על התופים והדק באמצעות רצועות ההידוק" },
+    { type:"separator" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק את כיוון ההרמה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הרמה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הרם את הרגליים לגובה המאפשר הכנסת משאית תחת הפלטפורמה" },
+    { type:"separator" },
+
+    { type:"captain", text:"תדרך את מכווני המשאית, הקפד על מהירות של עד 3 קמ\"ש" },
+
+    { type:"step", text:"כוון את המשאית לכניסה תחת הפלטפורמה" },
+    { type:"separator" },
+
+    { type:"captain", text:"הנחה את הצוות לבדוק את כיוון ההורדה" },
+    { type:"captain", text:"תדרך את הצוות לגבי הורדה מתואמת, הגדר מספר סיבובים שיבוצעו בכל פעם" },
+
+    { type:"step", text:"הורד את הרגליים עד להנחת הפלטפורמה על המשאית" },
+    { type:"separator" },
+
+    { type:"step", text:"נעל את הפלטפורמה אל המשאית" },
+    { type:"captain", text:"בדוק שכל הנועלים נעולים כנדרש" },
+    { type:"separator" },
+
+    { type:"step", text:"הסר פלטות קרקע מכל רגל ונעל והדק בברגים אל הפלטפורמה" },
+    { type:"step", text:"אסוף את משטחי פיזור הלחץ ונעל בכלוב המתאים על הפלטפורמה" }
+  ] }
+  };
+
+let currentId = null;
+let currentColorKey = null;
+let commanderMap = {};
+let isActiveMap = {};
+let userRoles = new Set();
+let rolesSelected = false;
+let stepAssignments = [];
+let stepChecks = [];
+let stepOwners = [];
+let prevStepChecks = [];
+let currentAssignSize = null;
+let currentSessionRef = null;
+window.sessionUsers = {};
+
+  let userId = localStorage.getItem('checklistUserId');
+  if (!userId) {
+    userId = (crypto.randomUUID ? crypto.randomUUID() : 'u_' + Date.now());
+    localStorage.setItem('checklistUserId', userId);
+  }
+
+  function sessionPath(taskId) {
+    return 'sessions/' + taskId;
+  }
+
+  function isCommander() {
+    return !!currentId && commanderMap[currentId] === userId;
+  }
+// 🔊 simple beep (no audio file needed)
+function playCommanderBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 880; // tone
+
+    gain.gain.value = 0.2;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, 120);
+  } catch (e) {
+    console.log('Audio blocked until user interaction');
+  }
+}
+  function getSessionUsers() {
+    return window.sessionUsers || {};
+  }
+
+  function getAllSelectedRoles() {
+    const users = Object.values(getSessionUsers());
+    const all = new Set();
+    users.forEach(u => {
+      (u.roles || []).forEach(r => all.add(r));
+    });
+    return all;
+  }
+
+  function closeCollapsibleForSoldiersWhenCommanderExists() {
+    const body = document.getElementById('collapsible-body');
+    const header = document.querySelector('.collapsible-header');
+    if (!body || !header) return;
+
+    if (currentId && commanderMap[currentId] && !isCommander()) {
+      body.style.display = 'none';
+      header.classList.remove('open');
+    }
+  }
+
+  const screenHome          = document.getElementById('screen-home');
+  const screenChecklist     = document.getElementById('screen-checklist');
+  const toolbar             = document.getElementById('toolbar');
+  const toolbarTitle        = document.getElementById('toolbar-title');
+  const toolbarLamp         = document.getElementById('toolbar-lamp');
+  const checklistContent    = document.getElementById('checklist-content');
+  const roleButtonsContainer= document.getElementById('role-buttons');
+  const commanderButton     = document.getElementById('btn-commander');
+  const resetDialog         = document.getElementById('reset-dialog');
+  const resetAllDialog      = document.getElementById('reset-all-dialog');
+  const toolbarAssign       = document.getElementById('toolbar-assign');
+  const shutdownBtn         = document.getElementById('btn-shutdown-all');
+  const roleBanner          = document.getElementById('role-banner');
+  const resetButton         = document.getElementById('btn-reset');
+  const missionClock        = document.getElementById('mission-clock');
+  const clockToggleBtn      = document.getElementById('btn-clock-toggle');
+  const clockResetBtn       = document.getElementById('btn-clock-reset');
+
+  let clockElapsedMs = 0;
+  let clockRunning = false;
+  let clockStartedAt = null;
+  let clockTickTimer = null;
+  let tileClockState = {};
+
+  const assignArrays = {
+    "antenna-deploy": {
+      4: ["AB","CD","CD","AB","CD","C","B","C","C","ABCD","C","AB","C","A","BD","AB","BD","AB","A","B","B","B","B","A","A","C","C","C","C","C","D","AB","A","B","A","A"],
+      6: [
+        "AB","CD","AB","EF","EF","C","D","C","C","C", "C","AB","C","B","EF","AD","AD","AD","B","E",
+        "E","E","E","F","F","F","C","C","C","C",
+        "C","AD","B","E","F","F"
+      ],
+      8: ["AB","CD","CD","EF","GH","C","E","C","C","AFGH","C","AB","C","G","EF","GH","CD","EF","G","B","B","B","B","G","G","C","C","C","C","C","E","GH","A","B","G","G"]
+    },
+    "antenna-tear":   { 4: [    "A","B","A","A","A","A","CD","AB",
+    "C","D","C","C","C","D","D","C","AC","C","D","B","AD","BC","AD","BC","BC",
+    "C","AB","C","AB","AB","AD","BD","C","C","C"], 
+	6: ["A","B","A","A","A","CD","AE","E","F","F","F","F","B","B","A","AC","B","B","B",
+    "CD","AB","B","AC","AC","F","AB","F","CD","EF","AB","AB","F","F","F"], 8: ["A","B","A","A","A","A","CD","AF","E","F","G","G","G","H","H","G",
+"GH","H","H","B","EF","AB","GH","EF","CD","G","AB","G","EF","CD","EF","AB","G","G","G"
+] },
+    "rcs-deploy":     { 4: [ "AB","AB","CD","AB","CD","CD","A","A","A","A","A","A","A","CD","A","A","A","A",
+    "CD","AB","CD","AB","A","AB","D","D","AB","CD","A","A","BCD","B","A","A","A",
+    "A","A","B","B","B","B","B","B","B","B","B"], 6: ["AB","ABCD","EF","CD","AB","AB","E","E","E","E","E","E","E","AB","E","E","E","AB",
+    "CD","EF","AB","E","AB","C","D","BE","CD","F","F","ABE","A","C","C","C","C",
+    "C","B","B","B","B","B","B","B","B","B","B"], 8: ["AB","ABCD","EF","GH","AB","AB","E","E","E","E","E","E","E","EF","E","E","E","CD",
+    "AB","GH","EF","E","AB","G","H","CD","EF","H","H","ABEF","A","G","G","G","G",
+    "G","B","B","B","B","B","B","B","B","B","B"] },
+    "rcs-tear":       { 4: ["A","A","A","B","C","D","BC","A","A","B","A","A","A","D","D","D","D","AB","D",
+    "AB","D","D","C","AB","AB","CD","C","AB","AB","D","D","D"], 6: [ "A","A","A","B","E","CD","EF","A","A","B","A","A","A","D","D","D","D","EF","D",
+    "EF","D","D","C","CD","CD","EF","B","EF","EF","A","A","A"], 8: ["A","A","A","B","C","D","EF","A","A","B","A","A","A","D","D","D","D","GH","D",
+    "GH","D","D","C","EF","EF","GH","B","CD","CD","A","A","A"] },
+    "rps-deploy":     { 4: ["AB","AB","CD","AB","CD","ABCD","ABCD","AB","ABCD","AB","C","CD","A","B",
+    "A","A","A","A","A","A","A","A","A","BCD","BCD","A","BD","BD","BD","A"], 6: ["AB","AB","CD","EF","CDEF","CDEF","CDEF","AB","CDEF","AB","C","EF","E","F",
+    "E","E","E","E","E","E","E","E","E","ABC","DEF","E","AB","AB","CD","E"], 8: ["AB","AB","CD","EF","ABGH","CDEF","CDEF","AB","CDEF","AB","G","GH","H","C",
+    "H","H","H","H","H","H","H","H","H","ABCD","EFGH","H","EF","GH","GH","H"] },
+    "rps-tear":       { 4: ["A","BC","BC","BC","ABCD","ABCD","A","A","A","A","BC","D","AB","CD","ABCD",
+    "CD","ABCD","ABCD","ABCD","ABCD","AB","CD","ABCD","ABCD"], 6: ["A","BC","BC","BC","ABC","DEF","A","A","A","A","BC","D","EF","AD","ABCD",
+    "EF","ABCD","ABCD","ABCD","ABCD","EF","EF","ABCD","ABCD"], 8: [ "A","BC","BC","BC","ABCD","EFGH","A","A","A","A","BC","D","EF","GH","ABCD",
+    "GH","EFGH","EFGH","EFGH","ABCD","EF","GH","ABCD","ABCD"] },
+    "cooling-deploy": { 4: [ "AB","AB","CD","AB","ABCD","ABCD","CD","ABCD","AB","ABCD","B","C","AD","BC",
+    "B","C","A","CD","AB","CD","CD","A","ABCD","B","B","B","B"], 6: ["EF","EF","CD","EF","ABCD","ABCD","EF","ABCD","EF","ABCD","E","F","AB","CD",
+    "E","F","C","EF","EF","AB","AB","C","ABEF","E","E","E","E"], 8: [ "AB","AB","CD","EF","ABGH","ABGH","EF","ABGH","AB","ABGH","E","F","GH","AB",
+    "E","F","H","AB","GH","EF","EF","H","ABCD","G","G","G","G"] },
+    "cooling-tear":   { 4: ["A","A","A","A","CD","B","CD","CD","AB","A","CD",
+    "AB","CD","AB","ABCD","AB","ABCD","ABCD","CD","AB"], 6: [ "A","A","A","A","CD","B","EF","EF","CD","B","AF",
+    "AB","CD","EF","ABCD","EF","ABCD","ABCD","EF","ABCD"], 8: ["A","A","A","A","CD","B","EF","GH","GH","E","AB",
+    "CD","EF","GH","ABCD","EF","ABCD","ABCD","EF","GH"] }
+  };
+
+  function formatClock(ms) {
+    ms = Math.max(0, Number(ms) || 0);
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const sec = String(totalSeconds % 60).padStart(2, '0');
+    return h + ':' + m + ':' + sec;
+  }
+
+  function getCurrentClockElapsed() {
+    let elapsed = Number(clockElapsedMs) || 0;
+    if (clockRunning && clockStartedAt) {
+      elapsed += Date.now() - Number(clockStartedAt);
+    }
+    return Math.max(0, elapsed);
+  }
+
+  function getElapsedFromClockData(data) {
+    if (!data) return 0;
+    let elapsed = Number(data.clockElapsedMs) || 0;
+    if (data.clockRunning && data.clockStartedAt) {
+      elapsed += Date.now() - Number(data.clockStartedAt);
+    }
+    return Math.max(0, elapsed);
+  }
+
+  function ensureTileClockElement(taskId) {
+    let el = document.getElementById('tile-clock-' + taskId);
+    if (el) return el;
+
+    const dot = document.getElementById('dot-' + taskId);
+    const tile = dot ? dot.closest('.tile') : null;
+    if (!tile) return null;
+
+    el = document.createElement('div');
+    el.id = 'tile-clock-' + taskId;
+    el.className = 'tile-clock-label hidden';
+    el.textContent = '00:00:00';
+    tile.appendChild(el);
+    return el;
+  }
+
+  function updateTileClockDisplays() {
+    Object.keys(checklistProgress || {}).forEach(id => {
+      const el = ensureTileClockElement(id);
+      if (!el) return;
+
+      const data = tileClockState[id];
+      const visible = !!(data && (data.clockEverStarted || data.clockRunning || Number(data.clockElapsedMs) > 0));
+
+      if (!visible) {
+        el.classList.add('hidden');
+        el.textContent = '00:00:00';
+        return;
+      }
+
+      el.textContent = formatClock(getElapsedFromClockData(data));
+      el.classList.remove('hidden');
+    });
+  }
+
+  function updateClockDisplay() {
+    if (missionClock) missionClock.textContent = formatClock(getCurrentClockElapsed());
+    updateTileClockDisplays();
+
+    if (clockToggleBtn) {
+      if (clockRunning) {
+        clockToggleBtn.textContent = 'STOP';
+        clockToggleBtn.classList.remove('start');
+        clockToggleBtn.classList.add('stop');
+      } else {
+        clockToggleBtn.textContent = 'START';
+        clockToggleBtn.classList.remove('stop');
+        clockToggleBtn.classList.add('start');
+      }
+    }
+  }
+
+  function updateClockControlsAccess() {
+    const canControlClock = isCommander();
+    if (clockToggleBtn) {
+      clockToggleBtn.style.display = canControlClock ? 'inline-flex' : 'none';
+      clockToggleBtn.style.alignItems = 'center';
+      clockToggleBtn.style.justifyContent = 'center';
+    }
+    if (clockResetBtn) {
+      clockResetBtn.style.display = canControlClock ? 'flex' : 'none';
+    }
+  }
+
+  function ensureClockTicker() {
+    if (clockTickTimer) return;
+    clockTickTimer = setInterval(updateClockDisplay, 250);
+  }
+
+  function setClockFromSession(data) {
+    clockElapsedMs = Number(data && data.clockElapsedMs) || 0;
+    clockRunning = !!(data && data.clockRunning);
+    clockStartedAt = data && data.clockStartedAt ? Number(data.clockStartedAt) : null;
+    updateClockDisplay();
+    updateClockControlsAccess();
+    ensureClockTicker();
+  }
+
+  function startClock() {
+    if (!currentId || clockRunning || !isCommander()) return;
+
+    if (!commanderMap[currentId] && !isActiveMap[currentId]) {
+      dbSet(sessionPath(currentId), {
+        commander: null,
+        active: true,
+        assignSize: currentAssignSize || 6,
+        roles: stepAssignments || [],
+        checks: stepChecks || [],
+        users: getSessionUsers(),
+        clockElapsedMs: getCurrentClockElapsed(),
+        clockRunning: true,
+        clockStartedAt: Date.now(),
+        clockEverStarted: true
+      });
+      return;
+    }
+
+    dbUpdate(sessionPath(currentId), {
+      active: isActiveMap[currentId] === 'done' ? 'done' : true,
+      clockElapsedMs: getCurrentClockElapsed(),
+      clockRunning: true,
+      clockStartedAt: Date.now(),
+      clockEverStarted: true
+    });
+  }
+
+  function stopClock() {
+    if (!currentId || !clockRunning || !isCommander()) return;
+    dbUpdate(sessionPath(currentId), {
+      clockElapsedMs: getCurrentClockElapsed(),
+      clockRunning: false,
+      clockStartedAt: null
+    });
+  }
+
+  function resetClock(taskId) {
+    if (!taskId) return;
+    dbUpdate(sessionPath(taskId), {
+      clockElapsedMs: 0,
+      clockRunning: false,
+      clockStartedAt: null,
+      clockEverStarted: false
+    });
+
+    if (taskId === currentId) {
+      clockElapsedMs = 0;
+      clockRunning = false;
+      clockStartedAt = null;
+      updateClockDisplay();
+    }
+  }
+
+  function startSession(taskId, commanderId) {
+    if (!currentAssignSize) currentAssignSize = 6;
+
+    const payload = {
+      commander: commanderId || null,
+      active: true,
+      assignSize: currentAssignSize,
+      roles: stepAssignments || [],
+      checks: stepChecks || [],
+      owners: [],
+      users: getSessionUsers(),
+      clockElapsedMs: 0,
+      clockRunning: false,
+      clockStartedAt: null,
+      clockEverStarted: false
+    };
+
+    dbSet(sessionPath(taskId), payload);
+  }
+
+  function updateCheck(taskId, index, value) {
+    const updates = {};
+    updates['checks/' + index] = value;
+    if (value) {
+      updates['owners/' + index] = userId;
+    } else {
+      updates['owners/' + index] = null;
+    }
+    dbUpdate(sessionPath(taskId), updates);
+  }
+
+  function updateAssignments(taskId) {
+    dbUpdate(sessionPath(taskId), {
+      roles: stepAssignments || [],
+      checks: stepChecks || []
+    });
+  }
+
+  function resetSession(taskId) {
+    dbRemove(sessionPath(taskId));
+  }
+
+  function resetAllSessions() {
+    dbRemove('sessions');
+    Object.keys(checklistProgress).forEach(id => {
+      checklistProgress[id] = [];
+      isActiveMap[id] = false;
+    });
+    commanderMap = {};
+    window.sessionUsers = {};
+    tileClockState = {};
+    clockElapsedMs = 0;
+    clockRunning = false;
+    clockStartedAt = null;
+    updateClockDisplay();
+  }
+
+  function listenToAllSessions(callback) {
+    const ref = dbRef('sessions');
+    ref.on('value', snapshot => {
+      callback(snapshot.val() || {});
+    });
+  }
+
+  function listenToSession(taskId, callback) {
+    const ref = dbRef(sessionPath(taskId));
+    ref.on('value', snapshot => {
+      callback(snapshot.val() || null);
+    });
+    return ref;
+  }
+
+  const checklistProgress = {
+    "antenna-deploy": [],
+    "antenna-tear": [],
+    "rcs-deploy": [],
+    "rcs-tear": [],
+    "rps-deploy": [],
+    "rps-tear": [],
+    "cooling-deploy": [],
+    "cooling-tear": []
+  };
+
+  function updateTiles(sessions) {
+    const allIds = Object.keys(checklistProgress);
+
+    allIds.forEach(id => {
+      const s = sessions[id];
+      if (!s) {
+        isActiveMap[id] = false;
+        checklistProgress[id] = [];
+        delete tileClockState[id];
+        return;
+      }
+
+      if (s.active === "done") {
+        isActiveMap[id] = "done";
+      } else if (s.active) {
+        isActiveMap[id] = "active";
+      } else {
+        isActiveMap[id] = false;
+      }
+
+      tileClockState[id] = {
+        clockElapsedMs: Number(s.clockElapsedMs) || 0,
+        clockRunning: !!s.clockRunning,
+        clockStartedAt: s.clockStartedAt ? Number(s.clockStartedAt) : null,
+        clockEverStarted: !!s.clockEverStarted
+      };
+
+      const arr = [];
+      if (s.checks) {
+        Object.keys(s.checks).forEach(k => {
+          arr[Number(k)] = !!s.checks[k];
+        });
+      }
+      checklistProgress[id] = arr;
+    });
+
+    updateIndicators();
+    updateTileClockDisplays();
+  }
+
+  listenToAllSessions(sessions => {
+    updateTiles(sessions);
+  });
+
+  function openChecklist(id, colorKey) {
+    currentId = id;
+    currentColorKey = colorKey;
+
+    const cl = checklists[id];
+    if (!cl) {
+      alert("לא נמצא צ'קליסט עבור " + id);
+      return;
+    }
+
+    toolbarTitle.textContent = "";
+
+    if (!currentAssignSize) {
+      currentAssignSize = 6;
+    }
+
+    userRoles = new Set();
+    rolesSelected = false;
+
+    if (currentSessionRef) {
+      currentSessionRef.off();
+      currentSessionRef = null;
+    }
+
+    currentSessionRef = listenToSession(id, data => {
+if (data) {
+  commanderMap[id] = data.commander || null;
+  // Normalize Firebase active state so toolbar lamp keeps blinking after Back + reopen
+  // Firebase stores active as true while running, and "done" when completed.
+  if (data.active === "done") {
+    isActiveMap[id] = "done";
+  } else if (data.active) {
+    isActiveMap[id] = "active";
+  } else {
+    isActiveMap[id] = false;
+  }
+
+  stepAssignments = data.roles || [];
+
+  const newChecks = data.checks || [];
+stepOwners = data.owners || [];
+  // 🔊 commander beep when a step becomes checked
+  if (isCommander() && prevStepChecks.length > 0) {
+    for (let i = 0; i < newChecks.length; i++) {
+      if (!prevStepChecks[i] && newChecks[i]) {
+        playCommanderBeep();
+        break;
+      }
+    }
+  }
+
+  // save for next comparison
+  prevStepChecks = [...newChecks];
+  stepChecks = newChecks;
+
+  currentAssignSize = data.assignSize || 6;
+
+  window.sessionUsers = data.users || {};
+  setClockFromSession(data);
+
+        if (isCommander()) {
+          userRoles = new Set();
+          rolesSelected = false;
+        } else {
+          const me = window.sessionUsers[userId] || {};
+          userRoles = new Set(me.roles || []);
+          rolesSelected = userRoles.size > 0;
+        }
+      } else {
+        commanderMap[id] = null;
+        isActiveMap[id] = false;
+        stepAssignments = [];
+        stepChecks = [];
+        currentAssignSize = 6;
+        window.sessionUsers = {};
+        userRoles = new Set();
+        rolesSelected = false;
+        setClockFromSession(null);
+      }
+
+      checklistProgress[id] = [...stepChecks];
+      renderChecklist();
+      renderRoleBanner();
+      updateCommanderButton();
+      updateIndicators();
+      closeCollapsibleForSoldiersWhenCommanderExists();
+    });
+
+    screenHome.classList.remove('active');
+    screenChecklist.classList.add('active');
+
+    setTimeout(() => {
+      closeCollapsibleForSoldiersWhenCommanderExists();
+    }, 50);
+
+    updateCommanderButton();
+    buildAssignButtonsToolbar();
+    updateIndicators();
+  }
+
+  function goHome() {
+    screenChecklist.classList.remove('active');
+    screenHome.classList.add('active');
+  }
+
+  function toggleCollapsible() {
+    const body = document.getElementById('collapsible-body');
+    const header = document.querySelector('.collapsible-header');
+
+    if (currentId && commanderMap[currentId] && !isCommander()) {
+      closeCollapsibleForSoldiersWhenCommanderExists();
+      return;
+    }
+
+    const isClosed = body.style.display === 'none';
+    body.style.display = isClosed ? 'block' : 'none';
+
+    if (isClosed) header.classList.add('open');
+    else header.classList.remove('open');
+  }
+
+function renderRoleBanner() {
+  if (!currentAssignSize) return;
+
+  roleBanner.style.display = 'flex';
+  roleBanner.innerHTML = '';
+
+  const letters = ['A','B','C','D','E','F','G','H'];
+  const users = Object.values(getSessionUsers());
+  const commanderView = isCommander();
+
+  for (let i = 0; i < currentAssignSize; i++) {
+    const L = letters[i];
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = L;
+
+    const takenBySomeone = users.some(u => (u.roles || []).includes(L));
+
+    if (commanderView) {
+      if (takenBySomeone) {
+        btn.style.background = 'yellow';
+        btn.style.color = 'black';
+        btn.style.border = '2px solid #000';
+      }
+
+      // do NOT disable, only block click
+      btn.style.opacity = '1';
+      btn.style.cursor = 'default';
+      btn.onclick = (e) => {
+        e.preventDefault();
+      };
+    } else {
+      if (userRoles.has(L)) {
+        btn.classList.add('active');
+      }
+
+      btn.onclick = () => {
+        if (userRoles.has(L)) userRoles.delete(L);
+        else userRoles.add(L);
+
+        rolesSelected = userRoles.size > 0;
+
+        renderRoleBanner();
+        renderChecklist();
+
+        dbUpdate(sessionPath(currentId) + '/users/' + userId, {
+          roles: Array.from(userRoles)
+        });
+      };
+    }
+
+    roleBanner.appendChild(btn);
+  }
+}
+
+  function initAssignmentsEmpty() {
+    const cl = checklists[currentId];
+    if (!cl) return;
+
+    const steps = cl.steps;
+    stepAssignments = [];
+    stepChecks = [];
+
+    steps.forEach(step => {
+      if (step.type === 'step') {
+        stepAssignments.push('');
+        stepChecks.push(false);
+      } else {
+        stepAssignments.push(null);
+        stepChecks.push(null);
+      }
+    });
+
+    currentAssignSize = null;
+  }
+
+  function applyAssign(size) {
+  // 🔹 highlight active button
+  document.querySelectorAll('#assign-extra .assign-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  const activeBtn = document.querySelector(`#assign-extra .assign-btn[onclick="applyAssign(${size})"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  // 🔹 original logic (UNCHANGED)
+  const cl = checklists[currentId];
+  if (!cl) return;
+
+  const steps = cl.steps;
+  const arr = (assignArrays[currentId] && assignArrays[currentId][size]) || [];
+
+  currentAssignSize = size;
+  stepAssignments = [];
+  stepChecks = [];
+
+  let idxStep = 0;
+  steps.forEach(step => {
+    if (step.type === 'step') {
+      stepAssignments.push(arr[idxStep] || '');
+      stepChecks.push(false);
+      idxStep++;
+    } else {
+      stepAssignments.push(null);
+      stepChecks.push(null);
+    }
+  });
+
+  dbUpdate(sessionPath(currentId), {
+    assignSize: size,
+    roles: stepAssignments,
+    checks: stepChecks
+  });
+
+  userRoles.clear();
+  rolesSelected = false;
+
+  dbUpdate(sessionPath(currentId) + '/users/' + userId, {
+    roles: []
+  });
+
+  renderChecklist();
+  renderRoleBanner();
+}
+
+  function clearAssignAllForCurrent() {
+    initAssignmentsEmpty();
+    roleButtonsContainer.style.display = 'none';
+    userRoles.clear();
+    rolesSelected = false;
+
+    dbUpdate(sessionPath(currentId) + '/users/' + userId, {
+      roles: []
+    });
+
+    updateAssignments(currentId);
+    renderChecklist();
+    renderRoleBanner();
+  }
+
+  function updateCommanderButton() {
+    const isCmd = isCommander();
+    const hasCommander = !!(currentId && commanderMap[currentId]);
+
+    commanderButton.disabled = hasCommander && !isCmd;
+    resetButton.disabled = !isCmd;
+
+    document.querySelectorAll('#assign-extra button').forEach(btn => {
+      btn.disabled = !isCmd;
+    });
+
+    if (hasCommander) commanderButton.classList.remove('commander-off');
+    else commanderButton.classList.add('commander-off');
+
+    updateClockControlsAccess();
+    closeCollapsibleForSoldiersWhenCommanderExists();
+  }
+
+  function buildAssignButtonsToolbar() {
+    toolbarAssign.innerHTML = '';
+  }
+
+  function updateIndicators() {
+    const state = isActiveMap[currentId];
+
+    if (state === "active") {
+      toolbarLamp.classList.remove('hidden');
+      toolbarLamp.classList.remove('done');
+    } else if (state === "done") {
+      toolbarLamp.classList.remove('hidden');
+      toolbarLamp.classList.add('done');
+    } else {
+      toolbarLamp.classList.add('hidden');
+      toolbarLamp.classList.remove('done');
+    }
+
+    const toolbarStatus = document.getElementById('toolbar-status');
+
+    if (state === "active" || state === "done") {
+      const cl = checklists[currentId];
+      const steps = cl.steps.filter(s => s.type === 'step');
+      const total = steps.length;
+      const done = (checklistProgress[currentId] || []).filter(v => v === true).length;
+
+      toolbarStatus.textContent = done + "/" + total;
+      toolbarStatus.classList.remove('hidden');
+    } else {
+      toolbarStatus.classList.add('hidden');
+    }
+
+    const ids = [
+      'antenna-deploy','antenna-tear',
+      'rcs-deploy','rcs-tear',
+      'rps-deploy','rps-tear',
+      'cooling-deploy','cooling-tear'
+    ];
+
+    ids.forEach(id => {
+      const dot   = document.getElementById('dot-' + id);
+      const label = document.getElementById('status-' + id);
+      const st    = isActiveMap[id];
+
+      if (!dot || !label) return;
+
+      dot.classList.add('hidden');
+      dot.classList.remove('dot-active-red','dot-done-green');
+
+      if (st === "active") {
+        dot.classList.remove('hidden');
+        dot.classList.add('dot-active-red');
+      } else if (st === "done") {
+        dot.classList.remove('hidden');
+        dot.classList.add('dot-done-green');
+      }
+
+      if (st === "active" || st === "done") {
+        const cl = checklists[id];
+        const steps = cl.steps.filter(s => s.type === 'step');
+        const total = steps.length;
+        const done = (checklistProgress[id] || []).filter(v => v === true).length;
+
+        label.textContent = done + "/" + total;
+        label.classList.remove('hidden');
+      } else {
+        label.classList.add('hidden');
+      }
+    });
+  }
+
+  function renderChecklist() {
+    const cl = checklists[currentId];
+    if (!cl) return;
+
+    const steps = cl.steps;
+    checklistContent.innerHTML = '';
+
+    let visibleIndex = 1;
+    const isCmd = isCommander();
+
+    steps.forEach((step, idx) => {
+      if (step.type === 'separator') {
+        const sep = document.createElement('div');
+        sep.className = 'separator-row';
+        checklistContent.appendChild(sep);
+        return;
+      }
+
+      if (step.type === 'captain') {
+        if (!isCmd) return;
+        const row = document.createElement('div');
+        row.className = 'captain-row';
+        row.innerHTML = step.text;
+        checklistContent.appendChild(row);
+        return;
+      }
+
+      if (step.type === 'step') {
+        const row = document.createElement('div');
+        row.className = 'task-row';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'task-checkbox';
+        checkbox.checked = !!stepChecks[idx];
+        if (isCmd && stepChecks[idx]) {
+          checkbox.classList.add('commander-checked-box');
+        }
+
+        const indexCircle = document.createElement('div');
+        indexCircle.className = 'task-index-circle';
+        indexCircle.textContent = visibleIndex;
+        visibleIndex++;
+
+        const textEl = document.createElement('div');
+        textEl.className = 'task-text';
+        textEl.innerHTML = step.text;
+
+        const rolesEl = document.createElement('div');
+        rolesEl.className = 'task-roles';
+        const roles = stepAssignments[idx] || '';
+        rolesEl.textContent = roles || '-';
+
+        const rolesForHighlight = isCommander() ? getAllSelectedRoles() : userRoles;
+
+        let highlight = false;
+        if (roles && rolesForHighlight.size > 0) {
+          for (const r of roles) {
+            if (rolesForHighlight.has(r)) {
+              highlight = true;
+              break;
+            }
+          }
+        }
+        if (highlight) {
+          row.classList.add('highlight');
+        }
+
+        let canCheck = false;
+
+const owner = stepOwners[idx];
+const stepUnlocked = isStepUnlocked(idx, steps, stepChecks);
+
+// Only the first role letter in the assignment may check the box.
+// Example: AB means A may check; B can see the step but cannot check it.
+const primaryRole = roles ? roles.charAt(0) : '';
+
+// if no owner yet → only the primary matching role can take it, and only if stage is unlocked
+if (!owner) {
+  if (stepUnlocked && !isCommander() && primaryRole && userRoles.has(primaryRole)) {
+    canCheck = true;
+  }
+}
+// if owned → only the same user can interact, but still only if this user has the primary role
+else {
+  if (stepUnlocked && owner === userId && primaryRole && userRoles.has(primaryRole)) {
+    canCheck = true;
+  }
+}
+
+checkbox.disabled = !canCheck;
+
+// commander view: always read-only, but highlight relevant current-stage checkboxes
+if (isCommander()) {
+  checkbox.disabled = true;
+
+  let commanderShouldGlow = false;
+  if (stepUnlocked && roles && getAllSelectedRoles().size > 0) {
+    for (const r of roles) {
+      if (getAllSelectedRoles().has(r)) {
+        commanderShouldGlow = true;
+        break;
+      }
+    }
+  }
+
+  if (commanderShouldGlow) {
+    checkbox.classList.add('commander-visible');
+  } else {
+    checkbox.classList.remove('commander-visible');
+  }
+}
+
+        checkbox.addEventListener('change', () => {
+          if (!canCheck) {
+            checkbox.checked = false;
+            return;
+          }
+
+          stepChecks[idx] = checkbox.checked;
+          updateCheck(currentId, idx, checkbox.checked);
+          checklistProgress[currentId] = [...stepChecks];
+          updateIndicators();
+          checkIfChecklistDone();
+          scrollToNextStep(idx);
+        });
+
+        rolesEl.addEventListener('click', () => {
+          if (!isCommander()) return;
+          const val = prompt('הכנס תפקידים (A–H), למשל AB או C:', roles || '');
+          if (val === null) return;
+          const clean = val.toUpperCase().replace(/[^A-H]/g,'');
+          stepAssignments[idx] = clean;
+          updateAssignments(currentId);
+          renderChecklist();
+        });
+
+        row.appendChild(checkbox);
+        row.appendChild(indexCircle);
+        row.appendChild(textEl);
+        row.appendChild(rolesEl);
+
+        checklistContent.appendChild(row);
+      }
+    });
+  }
+
+  function checkIfChecklistDone() {
+    const cl = checklists[currentId];
+    if (!cl) return;
+
+    const steps = cl.steps;
+    let anyStep = false;
+    let allChecked = true;
+
+    steps.forEach((step, idx) => {
+      if (step.type === 'step') {
+        anyStep = true;
+        if (!stepChecks[idx]) allChecked = false;
+      }
+    });
+
+    if (anyStep && allChecked) {
+      isActiveMap[currentId] = "done";
+      dbUpdate(sessionPath(currentId), {
+        active: "done",
+        clockElapsedMs: getCurrentClockElapsed(),
+        clockRunning: false,
+        clockStartedAt: null
+      });
+    } else if (commanderMap[currentId]) {
+      isActiveMap[currentId] = "active";
+      dbUpdate(sessionPath(currentId), { active: true });
+    } else {
+      isActiveMap[currentId] = false;
+    }
+  }
+
+  function scrollToNextStep(currentIdx) {
+    const cl = checklists[currentId];
+    if (!cl) return;
+
+    const steps = cl.steps;
+    let nextIndex = -1;
+    for (let i = currentIdx + 1; i < steps.length; i++) {
+      if (steps[i].type === 'step') {
+        nextIndex = i;
+        break;
+      }
+    }
+    if (nextIndex === -1) return;
+
+    const rows = checklistContent.querySelectorAll('.task-row');
+    let stepCounter = 0;
+    let targetRow = null;
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].type === 'step') {
+        if (i === nextIndex) {
+          targetRow = rows[stepCounter];
+          break;
+        }
+        stepCounter++;
+      }
+    }
+    if (!targetRow) return;
+
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const contentRect = checklistContent.getBoundingClientRect();
+    const rowRect = targetRow.getBoundingClientRect();
+
+    const offset = rowRect.top - contentRect.top;
+    const newScroll = checklistContent.scrollTop + offset - (toolbarRect.height + 8);
+
+    checklistContent.scrollTo({
+      top: newScroll < 0 ? 0 : newScroll,
+      behavior: 'smooth'
+    });
+  }
+function getStepStageMap(steps) {
+  const stageMap = [];
+  let currentStage = 0;
+
+  steps.forEach((step, idx) => {
+    if (step.type === 'separator') {
+      currentStage++;
+      stageMap[idx] = null;
+    } else if (step.type === 'step') {
+      stageMap[idx] = currentStage;
+    } else {
+      stageMap[idx] = null; // captain rows do not count
+    }
+  });
+
+  return stageMap;
+}
+
+function isStageComplete(targetStage, steps, stageMap, checks) {
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].type === 'step' && stageMap[i] === targetStage) {
+      if (!checks[i]) return false;
+    }
+  }
+  return true;
+}
+
+function isStepUnlocked(stepIndex, steps, checks) {
+  if (!steps[stepIndex] || steps[stepIndex].type !== 'step') return false;
+
+  // Section-gated flow:
+  // A step is enabled only when all operational steps in the section
+  // immediately before the previous separator are checked.
+  // Steps inside the same section are enabled together.
+  let previousSeparator = -1;
+  for (let i = stepIndex - 1; i >= 0; i--) {
+    if (steps[i].type === 'separator') {
+      previousSeparator = i;
+      break;
+    }
+  }
+
+  // First section: no separator before it, so it is open.
+  if (previousSeparator === -1) return true;
+
+  let separatorBeforePrevious = -1;
+  for (let i = previousSeparator - 1; i >= 0; i--) {
+    if (steps[i].type === 'separator') {
+      separatorBeforePrevious = i;
+      break;
+    }
+  }
+
+  for (let i = separatorBeforePrevious + 1; i < previousSeparator; i++) {
+    if (steps[i].type === 'step' && !checks[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function openResetAllDialog() {
+  goHome();
+  document.body.appendChild(resetAllDialog);
+  resetAllDialog.style.position = 'fixed';
+  resetAllDialog.style.display = 'flex';
+}
+  function cancelResetAll() {
+    resetAllDialog.style.display = 'none';
+  }
+
+  function confirmResetAll() {
+    resetAllSessions();
+
+    Object.keys(isActiveMap).forEach(id => isActiveMap[id] = false);
+    commanderMap = {};
+    userRoles.clear();
+    rolesSelected = false;
+    currentAssignSize = null;
+    window.sessionUsers = {};
+
+    if (currentId) {
+      initAssignmentsEmpty();
+      updateCommanderButton();
+      updateIndicators();
+      renderChecklist();
+      renderRoleBanner();
+    }
+
+    resetAllDialog.style.display = 'none';
+    goHome();
+  }
+
+  function cancelReset() {
+    resetDialog.style.display = 'none';
+  }
+
+  function confirmReset() {
+    if (!currentId) {
+      resetDialog.style.display = 'none';
+      return;
+    }
+
+    resetSession(currentId);
+    clockElapsedMs = 0;
+    clockRunning = false;
+    clockStartedAt = null;
+    updateClockDisplay();
+
+    initAssignmentsEmpty();
+    userRoles.clear();
+    rolesSelected = false;
+    isActiveMap[currentId] = false;
+    delete tileClockState[currentId];
+    window.sessionUsers = {};
+
+    updateCommanderButton();
+    updateIndicators();
+    renderChecklist();
+    renderRoleBanner();
+
+    resetDialog.style.display = 'none';
+  }
+
+let shutdownTimer = null;
+
+shutdownBtn.addEventListener('mousedown', () => {
+  shutdownTimer = setTimeout(() => {
+    openResetAllDialog();
+  }, 600);
+});
+
+shutdownBtn.addEventListener('mouseup', () => clearTimeout(shutdownTimer));
+shutdownBtn.addEventListener('mouseleave', () => clearTimeout(shutdownTimer));
+shutdownBtn.addEventListener('click', () => {
+  openResetAllDialog();
+});
+
+  function openPaperList() {
+    if (!currentId || !checklists[currentId]) {
+      alert("אין משימה פתוחה");
+      return;
+    }
+
+    const cl = checklists[currentId];
+
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = 0;
+    overlay.style.left = 0;
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0,0,0,0.6)';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = 9999;
+
+    const box = document.createElement('div');
+    box.style.width = '85vw';
+    box.style.maxHeight = '85vh';
+    box.style.background = '#fff';
+    box.style.color = '#000';
+    box.style.padding = '20px';
+    box.style.overflowY = 'auto';
+    box.style.position = 'relative';
+    box.style.border = '3px solid #000';
+    box.style.fontSize = '20px';
+    box.style.lineHeight = '1.5';
+
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = 'X';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '10px';
+    closeBtn.style.left = '10px';
+    closeBtn.style.background = 'red';
+    closeBtn.style.color = 'white';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.style.padding = '5px 12px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.onclick = () => overlay.remove();
+
+    box.appendChild(closeBtn);
+
+    let counter = 1;
+    cl.steps.forEach(step => {
+      if (step.type === 'step') {
+        const line = document.createElement('div');
+        line.style.margin = '10px 0';
+        line.style.color = '#000';
+        line.style.direction = 'rtl';
+        line.style.display = 'flex';
+        line.style.flexDirection = 'row';
+        line.style.alignItems = 'flex-start';
+        line.style.textAlign = 'right';
+
+        const num = document.createElement('span');
+        num.textContent = '.' + counter;
+        num.style.flex = '0 0 auto';
+        num.style.marginLeft = '8px';
+        num.style.direction = 'ltr';
+        num.style.unicodeBidi = 'isolate';
+
+        const txt = document.createElement('span');
+        txt.textContent = step.text.replace(/<[^>]*>/g,'');
+        txt.style.flex = '1 1 auto';
+        txt.style.minWidth = '0';
+        txt.style.direction = 'rtl';
+        txt.style.textAlign = 'right';
+
+        line.appendChild(num);
+        line.appendChild(txt);
+        box.appendChild(line);
+        counter++;
+      } else if (step.type === 'separator') {
+        const sep = document.createElement('div');
+        sep.style.borderBottom = '3px solid #000';
+        sep.style.margin = '15px 0';
+        box.appendChild(sep);
+      }
+    });
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+
+  function openUserGuide() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = 0;
+    overlay.style.left = 0;
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(0,0,0,0.6)';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = 9999;
+
+    const box = document.createElement('div');
+    box.style.width = '85vw';
+    box.style.maxHeight = '85vh';
+    box.style.background = '#fff';
+    box.style.color = '#000';
+    box.style.padding = '20px';
+    box.style.overflowY = 'auto';
+    box.style.position = 'relative';
+    box.style.border = '3px solid #000';
+    box.style.fontSize = '20px';
+    box.style.lineHeight = '1.55';
+    box.style.direction = 'rtl';
+    box.style.textAlign = 'right';
+
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = 'X';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '10px';
+    closeBtn.style.left = '10px';
+    closeBtn.style.background = 'red';
+    closeBtn.style.color = 'white';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.style.padding = '5px 12px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.onclick = () => overlay.remove();
+    box.appendChild(closeBtn);
+
+    const title = document.createElement('h1');
+    title.textContent = 'מדריך משתמש למערכת ניהול משימות פריסה וקיפול';
+    title.style.margin = '0 0 18px 0';
+    title.style.paddingLeft = '55px';
+    title.style.fontSize = '28px';
+    title.style.color = '#0057ff';
+    box.appendChild(title);
+
+    const guide = [
+      ['1. מטרת המערכת', [
+        'המערכת מיועדת לניהול מספר משימות של פריסה וקיפול במקביל, עם סנכרון בין מכשירים בזמן אמת.',
+        'כל משתמש יכול להיכנס למשימה, לבחור תפקיד, לראות את הצעדים הרלוונטיים לו ולסמן ביצוע בהתאם להרשאות.',
+        'מפקד המשימה רואה את התקדמות כלל המשתמשים, מנהל את שעון המשימה ומבצע איפוס בעת הצורך.'
+      ]],
+      ['2. המסך הראשי', [
+        'במסך הראשי מופיעים אריחי המשימות: פריסה וקיפול של אנטנה, קרון, מערכת כוח ומערכת קירור.',
+        'לחיצה על אריח פותחת את רשימת התיוג של אותה משימה.',
+        'כאשר משימה פעילה, תופיע נורה אדומה מהבהבת על האריח. בסיום משימה תופיע נורה ירוקה.',
+        'כאשר שעון משימה הופעל, הזמן יוצג גם על האריח של אותה משימה. השעון נשאר מוצג עד לאיפוס המשימה.',
+        'בתחתית המסך מופיע כפתור RESET ALL לאיפוס כל המשימות. פעולה זו מאפסת סימונים, מפקדים, תפקידים ושעונים בכל המשימות.'
+      ]],
+      ['3. מסך משימה', [
+        'בסרגל העליון מוצגים כפתור חזרה, כפתור רשימת נייר, נורת מצב ושדה שעון המשימה.',
+        'כפתור החזרה מחזיר למסך הראשי בלי לאפס את המשימה.',
+        'נורת המצב מציגה האם המשימה פעילה (מהבהבת באדום) או הושלמה (ירוקה).',
+        'שדה השעון מציג את זמן המשימה בפורמט HH:MM:SS.'
+      ]],
+      ['4. מצב מפקד', [
+        'לחיצה על כפתור מפקד הופכת את המשתמש למפקד המשימה, בתנאי שאין מפקד אחר פעיל באותה משימה.',
+        'יכול להיות רק מפקד אחד בכל משימה.',
+        'בתצוגת המפקד יש כפתורי ציוות ל-4, 6 או 8 אנשי צוות. לחיצה על כל כפתור ציוות מוסיפה ציוות אוטומטי לשדה שבסוף השורה.',
+        'המפקד יכול לשנות ידנית את הציוות על פי הצורך.',
+        'בתצוגת המפקד, אזור הבקרה של המשתמשים הרגילים נשאר סגור כדי למנוע שינויי בקרה לא רצויים.',
+        'בתצוגת המפקד מופיעים בהדגשה צהובה צעדי בקרה. צעדים אלה מוצגים למפקד בלבד.',
+        'המפקד רואה את כל הצעדים, את התקדמות המשימה ואת הסימונים שמבוצעים על ידי החיילים.',
+        'סימונים שבוצעו על ידי חיילים מודגשים בצבע ירוק בתצוגת המפקד.'
+      ]],
+      ['5. ציוות משתתפים', [
+        'משתמש מקבל מהמפקד ציוות בעל פה לפי שם אות (A עד H), ולוחץ על הכפתור עם האות המתאימה.',
+        'לאחר בחירת ציוות, הצעדים הרלוונטיים לאותו תפקיד מודגשים ומאפשרים סימון בהתאם ללוגיקה של המשימה.',
+        'בחירת תפקיד מסתנכרנת בין כל המשתמשים באותה משימה.',
+        'במסך המפקד ניתן לראות אילו תפקידים נבחרו על ידי המשתמשים.',
+        'כאשר מוגדרים למשימה מספר משתתפים (AB), רק משתמש שתפקידו הוא האות הראשונה (A) יכול לסמן ביצוע.',
+        'משתמש יכול להירשם ליותר מתפקיד אחד על ידי לחיצה על יותר מכפתור תפקיד אחד.',
+        'משתמש יכול לסמן ביצוע רק כאשר כל המשימות שלפני המפריד הצהוב בוצעו.'
+      ]],
+      ['6. שעון משימה', [
+        'שעון המשימה מוצג בפורמט HH:MM:SS.',
+        'כפתורי השליטה בשעון זמינים רק למפקד בחלק המתקפל.',
+        'START מתחיל את ספירת הזמן. לאחר התחלה הכפתור הופך ל-STOP.',
+        'STOP עוצר את השעון ושומר את הזמן הנוכחי.',
+        'כפתור החץ המעגלי מאפס את השעון של המשימה הנוכחית.',
+        'איפוס משימה באמצעות RESET MISSION מאפס גם את שעון אותה משימה.',
+        'איפוס כללי באמצעות RESET ALL מאפס את השעונים של כל המשימות.',
+        'לאחר שהשעון הופעל, הזמן מופיע גם על אריח המשימה במסך הראשי ונשאר שם עד איפוס המשימה.'
+      ]],
+      ['7. ביצוע וסימון צעדים', [
+        'כל שורה ברשימה היא צעד ביצוע, הנחיית מפקד או מפריד.',
+        'צעדים רגילים נספרים במספור ההתקדמות של המשימה.',
+        'מפרידים מופיעים כקו ברור בין קבוצות צעדים.',
+        'סימון תיבה מעדכן את ההתקדמות ומסתנכרן לכל המשתמשים המחוברים לאותה משימה.',
+        'התקדמות המשימה סופרת רק צעדים מבצעיים רגילים ולא סופרת צעדי מפקד או מפרידים.'
+      ]],
+      ['8. רשימת נייר', [
+        'כפתור רשימת נייר פותח רשימה לבנה ונקייה של צעדי המשימה בלבד.',
+        'הרשימה מיועדת לקריאה נוחה או להעתקה למסמך חיצוני.'
+      ]],
+      ['9. RESET MISSION', [
+        'כפתור RESET MISSION מאפס את המשימה הנוכחית בלבד.',
+        'האיפוס מוחק סימוני צעדים, בחירות תפקידים, מצב מפקד, מצב פעילות ושעון משימה של אותה משימה.',
+        'לאחר האיפוס, המשימה חוזרת למצב התחלתי והשעון חוזר ל-00:00:00.',
+        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
+      ]],
+      ['10. RESET ALL', [
+        'כפתור RESET ALL נמצא במסך הראשי.',
+        'הכפתור מאפס את כל המשימות במערכת.',
+        'האיפוס כולל סימוני צעדים, מפקדים, תפקידים, סטטוס משימה ושעונים של כל המשימות.',
+        'יש להשתמש בו רק כאשר רוצים להתחיל את כל המערכת מחדש.',
+        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
+      ]]
+    ];
+    guide.forEach(section => {
+      const h = document.createElement('h2');
+      h.textContent = section[0];
+      h.style.fontSize = '23px';
+      h.style.margin = '22px 0 8px 0';
+      h.style.color = '#003b73';
+      h.style.borderBottom = '2px solid #0057ff';
+      h.style.paddingBottom = '4px';
+      box.appendChild(h);
+
+      section[1].forEach(text => {
+        const line = document.createElement('div');
+        line.style.display = 'flex';
+        line.style.alignItems = 'flex-start';
+        line.style.gap = '8px';
+        line.style.margin = '8px 0';
+        line.style.direction = 'rtl';
+        line.style.textAlign = 'right';
+
+        const bullet = document.createElement('span');
+        bullet.textContent = '•';
+        bullet.style.flex = '0 0 auto';
+        bullet.style.fontWeight = '900';
+        bullet.style.color = '#0057ff';
+
+        const txt = document.createElement('span');
+        txt.textContent = text;
+        txt.style.flex = '1 1 auto';
+        txt.style.minWidth = '0';
+
+        line.appendChild(bullet);
+        line.appendChild(txt);
+        box.appendChild(line);
+      });
+    });
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+</script>
+
+<script>
+  window.addEventListener("load", () => {
+    document.getElementById('btn-paper-list').onclick = () => openPaperList();
+    document.getElementById('btn-user-guide').onclick = () => openUserGuide();
+
+    if (clockToggleBtn) {
+      clockToggleBtn.addEventListener('click', () => {
+        if (clockRunning) stopClock();
+        else startClock();
+      });
+    }
+
+    if (clockResetBtn) {
+      clockResetBtn.addEventListener('click', () => {
+        if (currentId) resetClock(currentId);
+      });
+    }
+
+    ensureClockTicker();
+    updateClockDisplay();
+    updateClockControlsAccess();
+
+    resetButton.addEventListener('click', () => {
+      if (!isCommander()) return;
+      resetDialog.style.display = 'flex';
+    });
+
+    commanderButton.addEventListener('click', () => {
+      if (commanderMap[currentId] && !isCommander()) return;
+
+      if (!commanderMap[currentId]) {
+        if (!currentAssignSize) currentAssignSize = 6;
+        startSession(currentId, userId);
+      } else {
+        resetSession(currentId);
+      }
+    });
+
+    window.openChecklist = openChecklist;
+    window.goHome = goHome;
+    window.toggleCollapsible = toggleCollapsible;
+    window.confirmReset = confirmReset;
+    window.cancelReset = cancelReset;
+    window.confirmResetAll = confirmResetAll;
+    window.cancelResetAll = cancelResetAll;
+    window.applyAssign = applyAssign;
+    window.clearAssignAllForCurrent = clearAssignAllForCurrent;
+    window.openPaperList = openPaperList;
+    window.openUserGuide = openUserGuide;
+  });
+</script>
+</body>
+</html>
