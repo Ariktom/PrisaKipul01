@@ -993,7 +993,7 @@
   </div>
 
   <div class="shutdown-wrapper">
-    <button id="btn-shutdown-all" class="shutdown-btn">RESET ALL</button>
+    <button id="btn-shutdown-all" class="shutdown-btn" style="display:none;">RESET ALL</button>
   </div>
 </div>
 
@@ -2192,6 +2192,12 @@ function playCommanderBeep() {
     if (lock) lock.style.display = 'none';
   }
 
+  function updateResetAllVisibility() {
+    const btn = document.getElementById('btn-shutdown-all');
+    if (!btn) return;
+    btn.style.display = isAdminUser ? 'inline-block' : 'none';
+  }
+
   function setPinBusy(isBusy) {
     const btn = document.getElementById('pin-submit');
     const input = document.getElementById('pin-input');
@@ -2237,6 +2243,7 @@ function playCommanderBeep() {
     const finish = () => {
       userId = null;
       isAdminUser = false;
+      updateResetAllVisibility();
       currentLoginVersion = null;
       protectedAppStarted = false;
       const input = document.getElementById('pin-input');
@@ -2291,6 +2298,7 @@ function playCommanderBeep() {
       })
       .then(isAdmin => {
         isAdminUser = !!isAdmin;
+        updateResetAllVisibility();
         return verifyPinAccess();
       })
       .then(() => {
@@ -2301,6 +2309,7 @@ function playCommanderBeep() {
       .catch(error => {
         console.error('PIN login failed:', error);
         isAdminUser = false;
+        updateResetAllVisibility();
         showPinLock('קוד שגוי או שאין הרשאה למסד הנתונים.');
       })
       .finally(() => setPinBusy(false));
@@ -2324,6 +2333,7 @@ function playCommanderBeep() {
       if (!user) {
         userId = null;
         isAdminUser = false;
+        updateResetAllVisibility();
         currentLoginVersion = null;
         showPinLock('');
         return;
@@ -2338,6 +2348,7 @@ function playCommanderBeep() {
           const data = userSnap.val() || {};
           currentLoginVersion = data.loginVersion || null;
           isAdminUser = !!data.isAdmin;
+          updateResetAllVisibility();
           if (!currentLoginVersion || currentLoginVersion !== version) {
             throw new Error('Saved login is no longer valid.');
           }
@@ -2347,7 +2358,11 @@ function playCommanderBeep() {
           hidePinLock();
           startProtectedApp();
         })
-        .catch(() => showPinLock(''));
+        .catch(() => {
+          isAdminUser = false;
+          updateResetAllVisibility();
+          showPinLock('');
+        });
     });
   }
 
