@@ -7,6 +7,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -820,9 +821,110 @@
   box-shadow: 0 2px 5px rgba(0,0,0,0.25);
 }
 
+  
+
+/* ===== PIN PROTECTION LAYER ===== */
+.pin-lock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: radial-gradient(circle at top, #12365f 0%, #071426 62%, #020712 100%);
+  color: #ffffff;
+  direction: rtl;
+}
+
+.pin-lock-card {
+  width: min(420px, 100%);
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.28);
+  border-radius: 18px;
+  padding: 24px 20px;
+  box-shadow: 0 18px 45px rgba(0,0,0,0.45);
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
+.pin-lock-card h1 {
+  margin: 0 0 8px 0;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.pin-lock-card p {
+  margin: 0 0 18px 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgba(255,255,255,0.86);
+}
+
+.pin-lock-input {
+  width: 100%;
+  height: 52px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.68);
+  background: #ffffff;
+  color: #0A1A2F;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  text-align: center;
+  outline: none;
+  direction: ltr;
+}
+
+.pin-lock-button {
+  width: 100%;
+  margin-top: 14px;
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #00c853, #009624);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+}
+
+.pin-lock-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.pin-lock-error {
+  min-height: 22px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffb3b3;
+}
+
+.pin-lock-small {
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.68);
+}
+
   </style>
 </head>
 <body>
+
+<!-- PIN login appears before the app is allowed to read/write Firebase sessions -->
+<div id="pin-lock" class="pin-lock-backdrop">
+  <div class="pin-lock-card">
+    <h1>כניסה למערכת</h1>
+    <p>הזן קוד PIN כדי לפתוח את מערכת הצ׳קליסטים.</p>
+    <input id="pin-input" class="pin-lock-input" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="PIN">
+    <button id="pin-submit" class="pin-lock-button">כניסה</button>
+    <div id="pin-error" class="pin-lock-error"></div>
+    <div class="pin-lock-small">ההגנה האמיתית מתבצעת בחוקי Firebase Database Rules.</div>
+  </div>
+</div>
+
 
 <div id="screen-home" class="screen active home-screen">
   <div class="btn-grid">
@@ -988,6 +1090,7 @@
     firebase.initializeApp(firebaseConfig);
   }
   var db = firebase.database();
+  var auth = firebase.auth();
 
   function dbRef(path) {
     return db.ref(path);
@@ -1646,11 +1749,9 @@ let currentAssignSize = null;
 let currentSessionRef = null;
 window.sessionUsers = {};
 
-  let userId = localStorage.getItem('checklistUserId');
-  if (!userId) {
-    userId = (crypto.randomUUID ? crypto.randomUUID() : 'u_' + Date.now());
-    localStorage.setItem('checklistUserId', userId);
-  }
+  // userId is now the Firebase Anonymous Auth UID.
+  // Do not use localStorage for security identity.
+  let userId = null;
 
   function sessionPath(taskId) {
     return 'sessions/' + taskId;
@@ -2058,9 +2159,111 @@ function playCommanderBeep() {
     updateTileClockDisplays();
   }
 
-  listenToAllSessions(sessions => {
-    updateTiles(sessions);
-  });
+  let protectedAppStarted = false;
+
+  function startProtectedApp() {
+    if (protectedAppStarted) return;
+    protectedAppStarted = true;
+    listenToAllSessions(sessions => {
+      updateTiles(sessions);
+    });
+  }
+
+  function showPinLock(message) {
+    const lock = document.getElementById('pin-lock');
+    const err = document.getElementById('pin-error');
+    if (lock) lock.style.display = 'flex';
+    if (err) err.textContent = message || '';
+  }
+
+  function hidePinLock() {
+    const lock = document.getElementById('pin-lock');
+    if (lock) lock.style.display = 'none';
+  }
+
+  function setPinBusy(isBusy) {
+    const btn = document.getElementById('pin-submit');
+    const input = document.getElementById('pin-input');
+    if (btn) {
+      btn.disabled = !!isBusy;
+      btn.textContent = isBusy ? 'בודק...' : 'כניסה';
+    }
+    if (input) input.disabled = !!isBusy;
+  }
+
+  function verifyPinAccess() {
+    return dbRef('sessions').once('value');
+  }
+
+  function submitPinLogin() {
+    const input = document.getElementById('pin-input');
+    const err = document.getElementById('pin-error');
+    const pin = input ? input.value.trim() : '';
+
+    if (!pin) {
+      if (err) err.textContent = 'יש להזין PIN.';
+      return;
+    }
+
+    setPinBusy(true);
+    if (err) err.textContent = '';
+
+    const signInPromise = auth.currentUser ? Promise.resolve({ user: auth.currentUser }) : auth.signInAnonymously();
+
+    signInPromise
+      .then(result => {
+        const user = result.user || auth.currentUser;
+        if (!user) throw new Error('לא ניתן להתחבר ל-Firebase Auth.');
+        userId = user.uid;
+        return dbSet('users/' + userId, {
+          pin: pin,
+          lastLoginAt: firebase.database.ServerValue.TIMESTAMP
+        });
+      })
+      .then(() => verifyPinAccess())
+      .then(() => {
+        hidePinLock();
+        startProtectedApp();
+        if (currentId) updateClockControlsAccess();
+      })
+      .catch(error => {
+        console.error('PIN login failed:', error);
+        showPinLock('PIN שגוי או שאין הרשאה למסד הנתונים.');
+      })
+      .finally(() => setPinBusy(false));
+  }
+
+  function initPinProtection() {
+    showPinLock('');
+
+    const btn = document.getElementById('pin-submit');
+    const input = document.getElementById('pin-input');
+
+    if (btn) btn.addEventListener('click', submitPinLogin);
+    if (input) {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') submitPinLogin();
+      });
+      setTimeout(() => input.focus(), 100);
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        userId = null;
+        showPinLock('');
+        return;
+      }
+      userId = user.uid;
+
+      // If this browser already signed in before and still has a valid PIN stored under /users/{uid}, enter automatically.
+      verifyPinAccess()
+        .then(() => {
+          hidePinLock();
+          startProtectedApp();
+        })
+        .catch(() => showPinLock(''));
+    });
+  }
 
   function openChecklist(id, colorKey) {
     currentId = id;
@@ -3020,6 +3223,7 @@ shutdownBtn.addEventListener('click', () => {
 
 <script>
   window.addEventListener("load", () => {
+    initPinProtection();
     document.getElementById('btn-paper-list').onclick = () => openPaperList();
     document.getElementById('btn-user-guide').onclick = () => openUserGuide();
 
