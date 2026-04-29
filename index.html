@@ -3271,4 +3271,110 @@ shutdownBtn.addEventListener('click', () => {
       ]],
       ['9. RESET MISSION', [
         'כפתור RESET MISSION מאפס את המשימה הנוכחית בלבד.',
-        'האיפוס מוחק סימוני צעדים, בחירות תפקידים,
+        'האיפוס מוחק סימוני צעדים, בחירות תפקידים, מצב מפקד, מצב פעילות ושעון משימה של אותה משימה.',
+        'לאחר האיפוס, המשימה חוזרת למצב התחלתי והשעון חוזר ל-00:00:00.',
+        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
+      ]],
+      ['10. RESET ALL', [
+        'כפתור RESET ALL נמצא במסך הראשי.',
+        'הכפתור מאפס את כל המשימות במערכת.',
+        'האיפוס כולל סימוני צעדים, מפקדים, תפקידים, סטטוס משימה ושעונים של כל המשימות.',
+        'יש להשתמש בו רק כאשר רוצים להתחיל את כל המערכת מחדש.',
+        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
+      ]]
+    ];
+    guide.forEach(section => {
+      const h = document.createElement('h2');
+      h.textContent = section[0];
+      h.style.fontSize = '23px';
+      h.style.margin = '22px 0 8px 0';
+      h.style.color = '#003b73';
+      h.style.borderBottom = '2px solid #0057ff';
+      h.style.paddingBottom = '4px';
+      box.appendChild(h);
+
+      section[1].forEach(text => {
+        const line = document.createElement('div');
+        line.style.display = 'flex';
+        line.style.alignItems = 'flex-start';
+        line.style.gap = '8px';
+        line.style.margin = '8px 0';
+        line.style.direction = 'rtl';
+        line.style.textAlign = 'right';
+
+        const bullet = document.createElement('span');
+        bullet.textContent = '•';
+        bullet.style.flex = '0 0 auto';
+        bullet.style.fontWeight = '900';
+        bullet.style.color = '#0057ff';
+
+        const txt = document.createElement('span');
+        txt.textContent = text;
+        txt.style.flex = '1 1 auto';
+        txt.style.minWidth = '0';
+
+        line.appendChild(bullet);
+        line.appendChild(txt);
+        box.appendChild(line);
+      });
+    });
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  }
+</script>
+
+<script>
+  window.addEventListener("load", () => {
+    initPinProtection();
+    document.getElementById('btn-paper-list').onclick = () => openPaperList();
+    document.getElementById('btn-user-guide').onclick = () => openUserGuide();
+
+    if (clockToggleBtn) {
+      clockToggleBtn.addEventListener('click', () => {
+        if (clockRunning) stopClock();
+        else startClock();
+      });
+    }
+
+    if (clockResetBtn) {
+      clockResetBtn.addEventListener('click', () => {
+        if (currentId) resetClock(currentId);
+      });
+    }
+
+    ensureClockTicker();
+    updateClockDisplay();
+    updateClockControlsAccess();
+
+    resetButton.addEventListener('click', () => {
+      if (!isCommander()) return;
+      resetDialog.style.display = 'flex';
+    });
+
+    commanderButton.addEventListener('click', () => {
+      if (commanderMap[currentId] && !isCommander()) return;
+
+      if (!commanderMap[currentId]) {
+        if (!currentAssignSize) currentAssignSize = 6;
+        startSession(currentId, userId);
+      } else {
+        resetSession(currentId);
+      }
+    });
+
+    window.openChecklist = openChecklist;
+    window.goHome = goHome;
+    window.toggleCollapsible = toggleCollapsible;
+    window.confirmReset = confirmReset;
+    window.cancelReset = cancelReset;
+    window.confirmResetAll = confirmResetAll;
+    window.cancelResetAll = cancelResetAll;
+    window.applyAssign = applyAssign;
+    window.clearAssignAllForCurrent = clearAssignAllForCurrent;
+    window.openPaperList = openPaperList;
+    window.openUserGuide = openUserGuide;
+  });
+</script>
+</body>
+</html>
