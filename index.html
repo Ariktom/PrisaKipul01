@@ -849,8 +849,8 @@
 }
 
 .pin-lock-card h1 {
-  margin: 0 0 8px 0;
-  font-size: 26px;
+  margin: 0 0 18px 0;
+  font-size: 28px;
   font-weight: 900;
 }
 
@@ -879,13 +879,15 @@
 .pin-lock-button {
   width: 100%;
   margin-top: 14px;
-  height: 48px;
+  height: 50px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, #00c853, #009624);
   color: #ffffff;
-  font-size: 18px;
-  font-weight: 900;
+  font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   cursor: pointer;
   box-shadow: 0 6px 14px rgba(0,0,0,0.35);
 }
@@ -916,12 +918,10 @@
 <!-- PIN login appears before the app is allowed to read/write Firebase sessions -->
 <div id="pin-lock" class="pin-lock-backdrop">
   <div class="pin-lock-card">
-    <h1>כניסה למערכת</h1>
-    <p>הזן קוד PIN כדי לפתוח את מערכת הצ׳קליסטים.</p>
+    <h1>הזן קוד כניסה</h1>
     <input id="pin-input" class="pin-lock-input" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="PIN">
     <button id="pin-submit" class="pin-lock-button">כניסה</button>
     <div id="pin-error" class="pin-lock-error"></div>
-    <div class="pin-lock-small">ההגנה האמיתית מתבצעת בחוקי Firebase Database Rules.</div>
   </div>
 </div>
 
@@ -1752,6 +1752,10 @@ window.sessionUsers = {};
   // userId is now the Firebase Anonymous Auth UID.
   // Do not use localStorage for security identity.
   let userId = null;
+  let isAdminUser = false;
+  let currentLoginVersion = null;
+  let logoutVersionRef = null;
+  let forceLogoutInProgress = false;
 
   function sessionPath(taskId) {
     return 'sessions/' + taskId;
@@ -2079,18 +2083,24 @@ function playCommanderBeep() {
   }
 
   function resetAllSessions() {
-    dbRemove('sessions');
-    Object.keys(checklistProgress).forEach(id => {
-      checklistProgress[id] = [];
-      isActiveMap[id] = false;
+    const newLogoutVersion = Date.now();
+    return dbUpdate('/', {
+      sessions: null,
+      'config/logoutVersion': newLogoutVersion
+    }).then(() => {
+      currentLoginVersion = newLogoutVersion;
+      Object.keys(checklistProgress).forEach(id => {
+        checklistProgress[id] = [];
+        isActiveMap[id] = false;
+      });
+      commanderMap = {};
+      window.sessionUsers = {};
+      tileClockState = {};
+      clockElapsedMs = 0;
+      clockRunning = false;
+      clockStartedAt = null;
+      updateClockDisplay();
     });
-    commanderMap = {};
-    window.sessionUsers = {};
-    tileClockState = {};
-    clockElapsedMs = 0;
-    clockRunning = false;
-    clockStartedAt = null;
-    updateClockDisplay();
   }
 
   function listenToAllSessions(callback) {
@@ -2164,6 +2174,7 @@ function playCommanderBeep() {
   function startProtectedApp() {
     if (protectedAppStarted) return;
     protectedAppStarted = true;
+    beginLogoutVersionListener();
     listenToAllSessions(sessions => {
       updateTiles(sessions);
     });
@@ -2195,13 +2206,70 @@ function playCommanderBeep() {
     return dbRef('sessions').once('value');
   }
 
+  function getLogoutVersion() {
+    return dbRef('config/logoutVersion').once('value').then(snap => snap.val() || 1);
+  }
+
+  function writeUserAccess(pin, loginVersion, asAdmin) {
+    return dbSet('users/' + userId, {
+      pin: pin,
+      isAdmin: !!asAdmin,
+      loginVersion: loginVersion,
+      lastLoginAt: firebase.database.ServerValue.TIMESTAMP
+    });
+  }
+
+  function savePinWithRole(pin, loginVersion) {
+    // Try admin first. Firebase Rules accept this only if the PIN equals config/adminPin.
+    return writeUserAccess(pin, loginVersion, true)
+      .then(() => true)
+      .catch(() => {
+        // If admin write failed, try normal user. Firebase Rules accept this only if the PIN equals config/pin.
+        return writeUserAccess(pin, loginVersion, false).then(() => false);
+      });
+  }
+
+  function forceLogoutToPin(message) {
+    if (forceLogoutInProgress) return;
+    forceLogoutInProgress = true;
+
+    const uid = userId;
+    const finish = () => {
+      userId = null;
+      isAdminUser = false;
+      currentLoginVersion = null;
+      protectedAppStarted = false;
+      const input = document.getElementById('pin-input');
+      if (input) input.value = '';
+      showPinLock(message || 'הגישה אופסה. יש להזין קוד מחדש.');
+      setTimeout(() => window.location.reload(), 350);
+    };
+
+    const cleanup = uid ? dbRemove('users/' + uid).catch(() => {}) : Promise.resolve();
+    cleanup
+      .then(() => auth.signOut().catch(() => {}))
+      .then(finish)
+      .catch(finish);
+  }
+
+  function beginLogoutVersionListener() {
+    if (logoutVersionRef) logoutVersionRef.off();
+    logoutVersionRef = dbRef('config/logoutVersion');
+    logoutVersionRef.on('value', snap => {
+      const latest = snap.val() || 1;
+      if (currentLoginVersion !== null && latest !== currentLoginVersion) {
+        forceLogoutToPin('הגישה אופסה על ידי מנהל. יש להזין קוד מחדש.');
+      }
+    });
+  }
+
   function submitPinLogin() {
     const input = document.getElementById('pin-input');
     const err = document.getElementById('pin-error');
     const pin = input ? input.value.trim() : '';
 
     if (!pin) {
-      if (err) err.textContent = 'יש להזין PIN.';
+      if (err) err.textContent = 'יש להזין קוד.';
       return;
     }
 
@@ -2215,12 +2283,16 @@ function playCommanderBeep() {
         const user = result.user || auth.currentUser;
         if (!user) throw new Error('לא ניתן להתחבר ל-Firebase Auth.');
         userId = user.uid;
-        return dbSet('users/' + userId, {
-          pin: pin,
-          lastLoginAt: firebase.database.ServerValue.TIMESTAMP
-        });
+        return getLogoutVersion();
       })
-      .then(() => verifyPinAccess())
+      .then(version => {
+        currentLoginVersion = version;
+        return savePinWithRole(pin, version);
+      })
+      .then(isAdmin => {
+        isAdminUser = !!isAdmin;
+        return verifyPinAccess();
+      })
       .then(() => {
         hidePinLock();
         startProtectedApp();
@@ -2228,7 +2300,8 @@ function playCommanderBeep() {
       })
       .catch(error => {
         console.error('PIN login failed:', error);
-        showPinLock('PIN שגוי או שאין הרשאה למסד הנתונים.');
+        isAdminUser = false;
+        showPinLock('קוד שגוי או שאין הרשאה למסד הנתונים.');
       })
       .finally(() => setPinBusy(false));
   }
@@ -2250,13 +2323,26 @@ function playCommanderBeep() {
     auth.onAuthStateChanged(user => {
       if (!user) {
         userId = null;
+        isAdminUser = false;
+        currentLoginVersion = null;
         showPinLock('');
         return;
       }
       userId = user.uid;
 
-      // If this browser already signed in before and still has a valid PIN stored under /users/{uid}, enter automatically.
-      verifyPinAccess()
+      Promise.all([
+        dbRef('users/' + userId).once('value'),
+        getLogoutVersion()
+      ])
+        .then(([userSnap, version]) => {
+          const data = userSnap.val() || {};
+          currentLoginVersion = data.loginVersion || null;
+          isAdminUser = !!data.isAdmin;
+          if (!currentLoginVersion || currentLoginVersion !== version) {
+            throw new Error('Saved login is no longer valid.');
+          }
+          return verifyPinAccess();
+        })
         .then(() => {
           hidePinLock();
           startProtectedApp();
@@ -2895,6 +2981,10 @@ function isStepUnlocked(stepIndex, steps, checks) {
 }
 
 function openResetAllDialog() {
+  if (!isAdminUser) {
+    alert('נדרש קוד מנהל כדי לבצע RESET ALL.');
+    return;
+  }
   goHome();
   document.body.appendChild(resetAllDialog);
   resetAllDialog.style.position = 'fixed';
@@ -2905,25 +2995,38 @@ function openResetAllDialog() {
   }
 
   function confirmResetAll() {
-    resetAllSessions();
-
-    Object.keys(isActiveMap).forEach(id => isActiveMap[id] = false);
-    commanderMap = {};
-    userRoles.clear();
-    rolesSelected = false;
-    currentAssignSize = null;
-    window.sessionUsers = {};
-
-    if (currentId) {
-      initAssignmentsEmpty();
-      updateCommanderButton();
-      updateIndicators();
-      renderChecklist();
-      renderRoleBanner();
+    if (!isAdminUser) {
+      resetAllDialog.style.display = 'none';
+      alert('נדרש קוד מנהל כדי לבצע RESET ALL.');
+      return;
     }
 
-    resetAllDialog.style.display = 'none';
-    goHome();
+    resetAllSessions()
+      .then(() => {
+        Object.keys(isActiveMap).forEach(id => isActiveMap[id] = false);
+        commanderMap = {};
+        userRoles.clear();
+        rolesSelected = false;
+        currentAssignSize = null;
+        window.sessionUsers = {};
+
+        if (currentId) {
+          initAssignmentsEmpty();
+          updateCommanderButton();
+          updateIndicators();
+          renderChecklist();
+          renderRoleBanner();
+        }
+
+        resetAllDialog.style.display = 'none';
+        goHome();
+        forceLogoutToPin('RESET ALL בוצע. יש להזין קוד מחדש.');
+      })
+      .catch(error => {
+        console.error('RESET ALL failed:', error);
+        resetAllDialog.style.display = 'none';
+        alert('RESET ALL נכשל. ודא שנכנסת עם קוד מנהל ושחוקי Firebase עודכנו.');
+      });
   }
 
   function cancelReset() {
@@ -3168,110 +3271,4 @@ shutdownBtn.addEventListener('click', () => {
       ]],
       ['9. RESET MISSION', [
         'כפתור RESET MISSION מאפס את המשימה הנוכחית בלבד.',
-        'האיפוס מוחק סימוני צעדים, בחירות תפקידים, מצב מפקד, מצב פעילות ושעון משימה של אותה משימה.',
-        'לאחר האיפוס, המשימה חוזרת למצב התחלתי והשעון חוזר ל-00:00:00.',
-        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
-      ]],
-      ['10. RESET ALL', [
-        'כפתור RESET ALL נמצא במסך הראשי.',
-        'הכפתור מאפס את כל המשימות במערכת.',
-        'האיפוס כולל סימוני צעדים, מפקדים, תפקידים, סטטוס משימה ושעונים של כל המשימות.',
-        'יש להשתמש בו רק כאשר רוצים להתחיל את כל המערכת מחדש.',
-        'פעולה זו דורשת אישור בחלון אישור לפני ביצוע.'
-      ]]
-    ];
-    guide.forEach(section => {
-      const h = document.createElement('h2');
-      h.textContent = section[0];
-      h.style.fontSize = '23px';
-      h.style.margin = '22px 0 8px 0';
-      h.style.color = '#003b73';
-      h.style.borderBottom = '2px solid #0057ff';
-      h.style.paddingBottom = '4px';
-      box.appendChild(h);
-
-      section[1].forEach(text => {
-        const line = document.createElement('div');
-        line.style.display = 'flex';
-        line.style.alignItems = 'flex-start';
-        line.style.gap = '8px';
-        line.style.margin = '8px 0';
-        line.style.direction = 'rtl';
-        line.style.textAlign = 'right';
-
-        const bullet = document.createElement('span');
-        bullet.textContent = '•';
-        bullet.style.flex = '0 0 auto';
-        bullet.style.fontWeight = '900';
-        bullet.style.color = '#0057ff';
-
-        const txt = document.createElement('span');
-        txt.textContent = text;
-        txt.style.flex = '1 1 auto';
-        txt.style.minWidth = '0';
-
-        line.appendChild(bullet);
-        line.appendChild(txt);
-        box.appendChild(line);
-      });
-    });
-
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-  }
-</script>
-
-<script>
-  window.addEventListener("load", () => {
-    initPinProtection();
-    document.getElementById('btn-paper-list').onclick = () => openPaperList();
-    document.getElementById('btn-user-guide').onclick = () => openUserGuide();
-
-    if (clockToggleBtn) {
-      clockToggleBtn.addEventListener('click', () => {
-        if (clockRunning) stopClock();
-        else startClock();
-      });
-    }
-
-    if (clockResetBtn) {
-      clockResetBtn.addEventListener('click', () => {
-        if (currentId) resetClock(currentId);
-      });
-    }
-
-    ensureClockTicker();
-    updateClockDisplay();
-    updateClockControlsAccess();
-
-    resetButton.addEventListener('click', () => {
-      if (!isCommander()) return;
-      resetDialog.style.display = 'flex';
-    });
-
-    commanderButton.addEventListener('click', () => {
-      if (commanderMap[currentId] && !isCommander()) return;
-
-      if (!commanderMap[currentId]) {
-        if (!currentAssignSize) currentAssignSize = 6;
-        startSession(currentId, userId);
-      } else {
-        resetSession(currentId);
-      }
-    });
-
-    window.openChecklist = openChecklist;
-    window.goHome = goHome;
-    window.toggleCollapsible = toggleCollapsible;
-    window.confirmReset = confirmReset;
-    window.cancelReset = cancelReset;
-    window.confirmResetAll = confirmResetAll;
-    window.cancelResetAll = cancelResetAll;
-    window.applyAssign = applyAssign;
-    window.clearAssignAllForCurrent = clearAssignAllForCurrent;
-    window.openPaperList = openPaperList;
-    window.openUserGuide = openUserGuide;
-  });
-</script>
-</body>
-</html>
+        'האיפוס מוחק סימוני צעדים, בחירות תפקידים,
