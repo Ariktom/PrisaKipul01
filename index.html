@@ -142,6 +142,42 @@
       transform: translateY(-50%) scale(0.94);
     }
 
+
+    .admin-kill-btn {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid #0057ff;
+      background: #0057ff;
+      color: #ffffff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.28);
+      user-select: none;
+      padding: 0;
+    }
+
+    .admin-kill-btn svg {
+      width: 23px;
+      height: 23px;
+      display: block;
+      fill: #ffffff;
+      stroke: #ffffff;
+      stroke-width: 1.2;
+      stroke-linejoin: miter;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.55));
+    }
+
+    .admin-kill-btn:active {
+      transform: translateY(-50%) scale(0.94);
+    }
+
     .shutdown-wrapper {
       margin-top: 14px;
       display: flex;
@@ -989,6 +1025,12 @@
 
   <div class="footer-bar">
     <button id="btn-user-guide" class="help-guide-btn" title="מדריך משתמש">?</button>
+    <button id="btn-admin-kill" class="admin-kill-btn" title="Admin reset + kick all" aria-label="Admin reset + kick all">
+      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <path d="M8 50 L12 20 L24 40 L32 20 L40 40 L52 20 L56 50 Z"></path>
+        <path d="M10 54 H54 V58 H10 Z"></path>
+      </svg>
+    </button>
     <div class="footer-text">Build Version: 1.0.1</div>
   </div>
 
@@ -1091,6 +1133,13 @@
   }
   var db = firebase.database();
   var auth = firebase.auth();
+
+  // Multi-app Firebase isolation: Hebrew full checklist app
+  const APP_ID = 'he-main';
+  const APP_ROOT = 'apps/' + APP_ID;
+  function appPath(path) {
+    return path ? (APP_ROOT + '/' + path) : APP_ROOT;
+  }
 
   function dbRef(path) {
     return db.ref(path);
@@ -1758,7 +1807,7 @@ window.sessionUsers = {};
   let forceLogoutInProgress = false;
 
   function sessionPath(taskId) {
-    return 'sessions/' + taskId;
+    return appPath('sessions/' + taskId);
   }
 
   function isCommander() {
@@ -1824,6 +1873,7 @@ function playCommanderBeep() {
   const resetAllDialog      = document.getElementById('reset-all-dialog');
   const toolbarAssign       = document.getElementById('toolbar-assign');
   const shutdownBtn         = document.getElementById('btn-shutdown-all');
+  const adminKillBtn        = document.getElementById('btn-admin-kill');
   const roleBanner          = document.getElementById('role-banner');
   const resetButton         = document.getElementById('btn-reset');
   const missionClock        = document.getElementById('mission-clock');
@@ -2083,17 +2133,19 @@ function playCommanderBeep() {
   }
 
   function resetAllSessions() {
-    const newLogoutVersion = Date.now();
-    return dbUpdate('/', {
-      sessions: null,
-      'config/logoutVersion': newLogoutVersion
-    }).then(() => {
-      currentLoginVersion = newLogoutVersion;
+    // STEP 1: USER reset-all behavior.
+    // Remove each mission under /sessions, exactly like RESET MISSION does for one mission.
+    // Do NOT touch config/logoutVersion, so nobody is kicked back to the PIN screen.
+    const ids = Object.keys(checklists);
+    return Promise.all(ids.map(id => dbRemove(sessionPath(id)))).then(() => {
       Object.keys(checklistProgress).forEach(id => {
         checklistProgress[id] = [];
         isActiveMap[id] = false;
       });
       commanderMap = {};
+      userRoles.clear();
+      rolesSelected = false;
+      currentAssignSize = null;
       window.sessionUsers = {};
       tileClockState = {};
       clockElapsedMs = 0;
@@ -2103,8 +2155,26 @@ function playCommanderBeep() {
     });
   }
 
+
+  function adminKillAllToPin() {
+    if (!isAdminUser) return;
+
+    const crown = document.getElementById('btn-admin-kill');
+    if (crown) crown.disabled = true;
+
+    resetAllSessions()
+      .then(() => getLogoutVersion())
+      .then(version => dbSet(appPath('config/logoutVersion'), Number(version || 1) + 1))
+      .catch(error => {
+        console.error('ADMIN KILL SWITCH failed:', error);
+      })
+      .finally(() => {
+        if (crown) crown.disabled = false;
+      });
+  }
+
   function listenToAllSessions(callback) {
-    const ref = dbRef('sessions');
+    const ref = dbRef(appPath('sessions'));
     ref.on('value', snapshot => {
       callback(snapshot.val() || {});
     });
@@ -2194,8 +2264,14 @@ function playCommanderBeep() {
 
   function updateResetAllVisibility() {
     const btn = document.getElementById('btn-shutdown-all');
-    if (!btn) return;
-    btn.style.display = isAdminUser ? 'inline-block' : 'none';
+    const crown = document.getElementById('btn-admin-kill');
+
+    // RESET ALL is visible to every logged-in user.
+    // It resets all missions only. It does NOT kick anyone to the PIN screen.
+    if (btn) btn.style.display = userId ? 'inline-block' : 'none';
+
+    // Crown is visible ONLY after verified admin Firebase /config write permission.
+    if (crown) crown.style.display = (userId && isAdminUser) ? 'flex' : 'none';
   }
 
   function setPinBusy(isBusy) {
@@ -2209,15 +2285,24 @@ function playCommanderBeep() {
   }
 
   function verifyPinAccess() {
-    return dbRef('sessions').once('value');
+    return dbRef(appPath('sessions')).once('value');
   }
 
   function getLogoutVersion() {
-    return dbRef('config/logoutVersion').once('value').then(snap => snap.val() || 1);
+    return dbRef(appPath('config/logoutVersion')).once('value').then(snap => snap.val() || 1);
+  }
+
+
+  function verifyAdminKillAccess() {
+    // Real admin test: only admin rules should allow writing under /config.
+    // We write the SAME logoutVersion value, so nobody is kicked during login.
+    return getLogoutVersion()
+      .then(version => dbSet(appPath('config/logoutVersion'), Number(version || 1)).then(() => true))
+      .catch(() => false);
   }
 
   function writeUserAccess(pin, loginVersion, asAdmin) {
-    return dbSet('users/' + userId, {
+    return dbSet(appPath('users/' + userId), {
       pin: pin,
       isAdmin: !!asAdmin,
       loginVersion: loginVersion,
@@ -2252,7 +2337,7 @@ function playCommanderBeep() {
       setTimeout(() => window.location.reload(), 350);
     };
 
-    const cleanup = uid ? dbRemove('users/' + uid).catch(() => {}) : Promise.resolve();
+    const cleanup = uid ? dbRemove(appPath('users/' + uid)).catch(() => {}) : Promise.resolve();
     cleanup
       .then(() => auth.signOut().catch(() => {}))
       .then(finish)
@@ -2261,7 +2346,7 @@ function playCommanderBeep() {
 
   function beginLogoutVersionListener() {
     if (logoutVersionRef) logoutVersionRef.off();
-    logoutVersionRef = dbRef('config/logoutVersion');
+    logoutVersionRef = dbRef(appPath('config/logoutVersion'));
     logoutVersionRef.on('value', snap => {
       const latest = snap.val() || 1;
       if (currentLoginVersion !== null && latest !== currentLoginVersion) {
@@ -2296,8 +2381,9 @@ function playCommanderBeep() {
         currentLoginVersion = version;
         return savePinWithRole(pin, version);
       })
-      .then(isAdmin => {
-        isAdminUser = !!isAdmin;
+      .then(() => verifyAdminKillAccess())
+      .then(hasAdminKillAccess => {
+        isAdminUser = !!hasAdminKillAccess;
         updateResetAllVisibility();
         return verifyPinAccess();
       })
@@ -2341,20 +2427,23 @@ function playCommanderBeep() {
       userId = user.uid;
 
       Promise.all([
-        dbRef('users/' + userId).once('value'),
+        dbRef(appPath('users/' + userId)).once('value'),
         getLogoutVersion()
       ])
         .then(([userSnap, version]) => {
           const data = userSnap.val() || {};
           currentLoginVersion = data.loginVersion || null;
-          isAdminUser = !!data.isAdmin;
+          isAdminUser = false;
           updateResetAllVisibility();
           if (!currentLoginVersion || currentLoginVersion !== version) {
             throw new Error('Saved login is no longer valid.');
           }
           return verifyPinAccess();
         })
-        .then(() => {
+        .then(() => verifyAdminKillAccess())
+        .then(hasAdminKillAccess => {
+          isAdminUser = !!hasAdminKillAccess;
+          updateResetAllVisibility();
           hidePinLock();
           startProtectedApp();
         })
@@ -2996,10 +3085,6 @@ function isStepUnlocked(stepIndex, steps, checks) {
 }
 
 function openResetAllDialog() {
-  if (!isAdminUser) {
-    alert('נדרש קוד מנהל כדי לבצע RESET ALL.');
-    return;
-  }
   goHome();
   document.body.appendChild(resetAllDialog);
   resetAllDialog.style.position = 'fixed';
@@ -3010,21 +3095,8 @@ function openResetAllDialog() {
   }
 
   function confirmResetAll() {
-    if (!isAdminUser) {
-      resetAllDialog.style.display = 'none';
-      alert('נדרש קוד מנהל כדי לבצע RESET ALL.');
-      return;
-    }
-
     resetAllSessions()
       .then(() => {
-        Object.keys(isActiveMap).forEach(id => isActiveMap[id] = false);
-        commanderMap = {};
-        userRoles.clear();
-        rolesSelected = false;
-        currentAssignSize = null;
-        window.sessionUsers = {};
-
         if (currentId) {
           initAssignmentsEmpty();
           updateCommanderButton();
@@ -3035,12 +3107,11 @@ function openResetAllDialog() {
 
         resetAllDialog.style.display = 'none';
         goHome();
-        forceLogoutToPin('RESET ALL בוצע. יש להזין קוד מחדש.');
       })
       .catch(error => {
         console.error('RESET ALL failed:', error);
         resetAllDialog.style.display = 'none';
-        alert('RESET ALL נכשל. ודא שנכנסת עם קוד מנהל ושחוקי Firebase עודכנו.');
+        alert('RESET ALL נכשל. בדוק הרשאות Firebase לכתיבה תחת sessions.');
       });
   }
 
@@ -3088,6 +3159,10 @@ shutdownBtn.addEventListener('mouseleave', () => clearTimeout(shutdownTimer));
 shutdownBtn.addEventListener('click', () => {
   openResetAllDialog();
 });
+
+if (adminKillBtn) {
+  adminKillBtn.addEventListener('click', adminKillAllToPin);
+}
 
   function openPaperList() {
     if (!currentId || !checklists[currentId]) {
