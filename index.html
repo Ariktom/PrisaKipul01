@@ -5,7 +5,66 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checklist System</title>
 
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js">
+function isMissionCompleteForTeamReport() {
+  var lamp = document.getElementById('toolbar-lamp');
+  return !!(lamp && lamp.classList && lamp.classList.contains('done'));
+}
+
+
+
+function refreshTeamReportButton() {
+  var btn = document.getElementById('team-report-btn') || document.querySelector('.team-report-btn');
+  if (!btn) return;
+
+  var lamp = document.getElementById('toolbar-lamp');
+  var complete = !!(lamp && lamp.classList.contains('done'));
+
+  btn.disabled = !complete;
+
+  if (complete) {
+    btn.classList.add('report-active');
+    btn.title = '';
+  } else {
+    btn.classList.remove('report-active');
+    btn.title = 'הפקת דו״ח אפשרית רק לאחר השלמת המשימה';
+  }
+}
+
+
+setInterval(refreshTeamReportButton, 400);
+
+
+
+(function setupReportButtonLockObserver(){
+  function start() {
+    try {
+      refreshTeamReportButton();
+
+      var lamp = document.getElementById('toolbar-lamp');
+      if (lamp && window.MutationObserver) {
+        var observer = new MutationObserver(function(){ refreshTeamReportButton(); });
+        observer.observe(lamp, { attributes: true, attributeFilter: ['class'] });
+      }
+
+      document.addEventListener('click', function(e) {
+        if (e.target && (e.target.classList.contains('team-btn') || e.target.id === 'btn-team' || e.target.id === 'btn-team-list')) {
+          setTimeout(refreshTeamReportButton, 50);
+        }
+      });
+
+      setInterval(refreshTeamReportButton, 1500);
+    } catch(e) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+
+</script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
@@ -420,11 +479,27 @@
       margin-bottom: 10px;
     }
 
-    .collapsible-header span {
-      display: inline-block;
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 28px;
+      cursor: pointer;
+      user-select: none;
+      direction: rtl;
+      text-align: right;
+    }
+
+    .collapse-triangle {
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 16px solid #ffffff;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.75));
       transition: transform 0.25s ease;
     }
-    .collapsible-header.open span {
+    .collapsible-header.open .collapse-triangle {
       transform: rotate(180deg);
     }
 
@@ -947,7 +1022,182 @@
   color: rgba(255,255,255,0.68);
 }
 
-  </style>
+
+/* ===== TEAM REPORT MODAL ===== */
+.team-btn {
+  background: linear-gradient(135deg, #0077ff, #004dcc);
+  color: #ffffff;
+  border: 2px solid #b9d7ff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  margin: 4px;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.team-btn:active { transform: scale(0.96); }
+.team-btn:disabled {
+  background: #777777 !important;
+  color: #dddddd !important;
+  border-color: #999999 !important;
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+.team-dialog,
+.team-dialog * {
+  font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif !important;
+  font-weight: 800 !important;
+}
+
+.team-dialog {
+  width: min(440px, calc(100vw - 28px));
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: #ffffff;
+  color: #000000;
+  border-radius: 14px;
+  padding: 18px;
+  text-align: right;
+  direction: rtl;
+  box-shadow: 0 12px 35px rgba(0,0,0,0.45);
+}
+.team-dialog h2 {
+  margin: 0 0 12px 0;
+  font-size: 22px;
+  text-align: center;
+  color: #0a2a6a;
+}
+.team-row {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 9px;
+}
+.team-letter {
+  background: #0a2a6a;
+  color: #ffffff;
+  border-radius: 8px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900 !important;
+  direction: ltr;
+}
+.team-input {
+  height: 38px;
+  border: 2px solid #b0bec5;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  font-weight: 800 !important;
+  outline: none;
+  direction: rtl;
+}
+.team-input::placeholder {
+  font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif !important;
+  font-weight: 800 !important;
+}
+.team-input:focus {
+  border-color: #0077ff;
+  box-shadow: 0 0 0 3px rgba(0,119,255,0.15);
+}
+.team-dialog-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+.team-report-btn,
+.team-clear-btn,
+.team-close-btn {
+  min-height: 42px;
+  border: none;
+  border-radius: 9px;
+  padding: 9px 14px;
+  font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif !important;
+  font-size: 16px;
+  font-weight: 900 !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.team-report-btn {
+  width: 155px;
+  flex: 0 0 155px;
+  background: linear-gradient(135deg,#00c853,#009624);
+  color: #ffffff;
+}
+.team-clear-btn {
+  width: 84px;
+  flex: 0 0 84px;
+  background: linear-gradient(135deg,#ffd54f,#f9a825);
+  color: #000000;
+}
+.team-close-btn {
+  width: 96px;
+  flex: 0 0 96px;
+  background: #455a64;
+  color: #ffffff;
+}
+
+
+  
+/* ===== REPORT BUTTON COMPLETE-MISSION LOCK ===== */
+.team-report-btn:disabled,
+#team-report-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.45) !important;
+}
+
+
+
+
+/* ===== REPORT BUTTON: GREY -> GREEN ON GREEN LAMP ===== */
+.team-report-btn,
+#team-report-btn {
+  background: #7b7b7b !important;
+  background-image: none !important;
+  color: #e2e2e2 !important;
+  border: 2px solid #9d9d9d !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  filter: none !important;
+  transition: all 0.25s ease !important;
+  font-family: "Segoe UI", Arial, sans-serif !important;
+  font-weight: 900 !important;
+}
+
+.team-report-btn.report-active,
+#team-report-btn.report-active {
+  background: linear-gradient(135deg,#00c853,#009624) !important;
+  color: #ffffff !important;
+  border: 2px solid #b9ffcf !important;
+  box-shadow: 0 0 10px rgba(0,255,120,0.45) !important;
+}
+
+
+
+/* ===== FORCE SANS SERIF REPORT BUTTON FONT ===== */
+.team-report-btn,
+#team-report-btn,
+.team-report-btn *,
+#team-report-btn * {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  letter-spacing: 0 !important;
+}
+
+</style>
 </head>
 <body>
 
@@ -1031,7 +1281,7 @@
         <path d="M10 54 H54 V58 H10 Z"></path>
       </svg>
     </button>
-    <div class="footer-text">Build Version: 1.0.1</div>
+    <div class="footer-text">Build Version: 1.0.3</div>
   </div>
 
   <div class="shutdown-wrapper">
@@ -1062,7 +1312,7 @@
 
   <div class="collapsible">
     <div class="collapsible-header" onclick="toggleCollapsible()">
-      <span>⌄</span>
+      <span class="collapse-triangle" aria-hidden="true"></span>
     </div>
 
     <div id="collapsible-body" class="collapsible-body">
@@ -1084,6 +1334,7 @@
     <span class="man-icon"></span> 8
   </button>
   <button class="assign-clear-btn" onclick="clearAssignAllForCurrent()">X</button>
+  <button id="btn-team" class="team-btn" onclick="openTeamDialog()" disabled>צוות</button>
 </div>
 
 <div class="mission-clock-controls" id="mission-clock-controls">
@@ -1113,6 +1364,18 @@
     <div class="dialog-buttons">
       <button class="confirm" onclick="confirmResetAll()">כן</button>
       <button class="cancel" onclick="cancelResetAll()">לא</button>
+    </div>
+  </div>
+</div>
+
+<div id="team-dialog-backdrop" class="dialog-backdrop">
+  <div class="team-dialog">
+    <h2>צוות משימה</h2>
+    <div id="team-fields"></div>
+    <div class="team-dialog-buttons">
+      <button class="team-report-btn" onclick="generateMissionReport()" id="team-report-btn">הפק דו&quot;ח משימה</button>
+      <button class="team-clear-btn" onclick="clearTeamFields()">נקה</button>
+      <button class="team-close-btn" onclick="closeTeamDialog()">סגור</button>
     </div>
   </div>
 </div>
@@ -1795,6 +2058,8 @@ let stepChecks = [];
 let stepOwners = [];
 let prevStepChecks = [];
 let currentAssignSize = null;
+let teamSizeSelected = false;
+let teamNames = {};
 let currentSessionRef = null;
 window.sessionUsers = {};
 
@@ -1879,6 +2144,9 @@ function playCommanderBeep() {
   const missionClock        = document.getElementById('mission-clock');
   const clockToggleBtn      = document.getElementById('btn-clock-toggle');
   const clockResetBtn       = document.getElementById('btn-clock-reset');
+  const teamButton          = document.getElementById('btn-team');
+  const teamDialogBackdrop  = document.getElementById('team-dialog-backdrop');
+  const teamFieldsContainer = document.getElementById('team-fields');
 
   let clockElapsedMs = 0;
   let clockRunning = false;
@@ -2044,6 +2312,8 @@ function playCommanderBeep() {
         commander: null,
         active: true,
         assignSize: currentAssignSize || 6,
+        assignSelected: !!teamSizeSelected,
+        teamNames: teamNames || {},
         roles: stepAssignments || [],
         checks: stepChecks || [],
         users: getSessionUsers(),
@@ -2097,6 +2367,8 @@ function playCommanderBeep() {
       commander: commanderId || null,
       active: true,
       assignSize: currentAssignSize,
+      assignSelected: !!teamSizeSelected,
+      teamNames: teamNames || {},
       roles: stepAssignments || [],
       checks: stepChecks || [],
       owners: [],
@@ -2146,6 +2418,8 @@ function playCommanderBeep() {
       userRoles.clear();
       rolesSelected = false;
       currentAssignSize = null;
+      teamSizeSelected = false;
+      teamNames = {};
       window.sessionUsers = {};
       tileClockState = {};
       clockElapsedMs = 0;
@@ -2511,6 +2785,8 @@ stepOwners = data.owners || [];
   stepChecks = newChecks;
 
   currentAssignSize = data.assignSize || 6;
+  teamSizeSelected = !!data.assignSelected;
+  teamNames = data.teamNames || {};
 
   window.sessionUsers = data.users || {};
   setClockFromSession(data);
@@ -2529,6 +2805,8 @@ stepOwners = data.owners || [];
         stepAssignments = [];
         stepChecks = [];
         currentAssignSize = 6;
+        teamSizeSelected = false;
+        teamNames = {};
         window.sessionUsers = {};
         userRoles = new Set();
         rolesSelected = false;
@@ -2577,6 +2855,7 @@ stepOwners = data.owners || [];
   }
 
 function renderRoleBanner() {
+  updateTeamButtonState();
   if (!currentAssignSize) return;
 
   roleBanner.style.display = 'flex';
@@ -2650,6 +2929,9 @@ function renderRoleBanner() {
     });
 
     currentAssignSize = null;
+    teamSizeSelected = false;
+    teamNames = {};
+    updateTeamButtonState();
   }
 
   function applyAssign(size) {
@@ -2669,6 +2951,8 @@ function renderRoleBanner() {
   const arr = (assignArrays[currentId] && assignArrays[currentId][size]) || [];
 
   currentAssignSize = size;
+  teamSizeSelected = true;
+  trimTeamNamesToSize(size);
   stepAssignments = [];
   stepChecks = [];
 
@@ -2686,6 +2970,8 @@ function renderRoleBanner() {
 
   dbUpdate(sessionPath(currentId), {
     assignSize: size,
+    assignSelected: true,
+    teamNames: teamNames || {},
     roles: stepAssignments,
     checks: stepChecks
   });
@@ -2699,6 +2985,7 @@ function renderRoleBanner() {
 
   renderChecklist();
   renderRoleBanner();
+  updateTeamButtonState();
 }
 
   function clearAssignAllForCurrent() {
@@ -2711,9 +2998,182 @@ function renderRoleBanner() {
       roles: []
     });
 
+    dbUpdate(sessionPath(currentId), { assignSelected: false, teamNames: {} });
     updateAssignments(currentId);
     renderChecklist();
     renderRoleBanner();
+    updateTeamButtonState();
+  }
+
+
+  function updateTeamButtonState() {
+    if (!teamButton) return;
+    const isCmd = isCommander();
+    teamButton.style.display = isCmd ? 'inline-block' : 'none';
+    teamButton.disabled = !isCmd || !teamSizeSelected || !currentAssignSize;
+    if (!isCmd && teamDialogBackdrop) teamDialogBackdrop.style.display = 'none';
+  }
+
+  function trimTeamNamesToSize(size) {
+    const letters = ['A','B','C','D','E','F','G','H'];
+    const keep = new Set(letters.slice(0, Number(size) || 0));
+    const cleaned = {};
+    Object.keys(teamNames || {}).forEach(k => {
+      if (keep.has(k) && teamNames[k]) cleaned[k] = teamNames[k];
+    });
+    teamNames = cleaned;
+  }
+
+  function openTeamDialog() {
+    if (!isCommander() || !teamSizeSelected || !currentAssignSize) return;
+    buildTeamFields();
+    teamDialogBackdrop.style.display = 'flex';
+  }
+
+  function closeTeamDialog() {
+    if (teamDialogBackdrop) teamDialogBackdrop.style.display = 'none';
+  }
+
+  function buildTeamFields() {
+    if (!teamFieldsContainer) return;
+    const letters = ['A','B','C','D','E','F','G','H'];
+    teamFieldsContainer.innerHTML = '';
+
+    for (let i = 0; i < currentAssignSize; i++) {
+      const L = letters[i];
+      const row = document.createElement('div');
+      row.className = 'team-row';
+
+      const letter = document.createElement('div');
+      letter.className = 'team-letter';
+      letter.textContent = L;
+
+      const input = document.createElement('input');
+      input.className = 'team-input';
+      input.type = 'text';
+      input.placeholder = 'שם איש צוות';
+      input.value = (teamNames && teamNames[L]) || '';
+      input.addEventListener('input', () => {
+        teamNames[L] = input.value.trim();
+        if (currentId) {
+          dbUpdate(sessionPath(currentId) + '/teamNames', { [L]: teamNames[L] || null });
+        }
+      });
+
+      row.appendChild(letter);
+      row.appendChild(input);
+      teamFieldsContainer.appendChild(row);
+    }
+  }
+
+
+  function clearTeamFields() {
+    document.querySelectorAll('#team-fields .team-input').forEach(input => {
+      input.value = '';
+    });
+    teamNames = {};
+    if (currentId) {
+      dbSet(sessionPath(currentId) + '/teamNames', {});
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatDateForReport(date) {
+    try { return date.toLocaleString('he-IL'); }
+    catch(e) { return date.toISOString(); }
+  }
+
+  function generateMissionReport() {
+  if (!isMissionCompleteForTeamReport()) {
+    alert('ניתן להפיק דו"ח משימה רק לאחר השלמת המשימה');
+    refreshTeamReportButton();
+    return;
+  }
+    if (!currentId || !isCommander()) return;
+    const cl = checklists[currentId];
+    if (!cl) return;
+
+    // make sure latest field text is captured before building report
+    document.querySelectorAll('#team-fields .team-row').forEach(row => {
+      const letter = row.querySelector('.team-letter');
+      const input = row.querySelector('.team-input');
+      if (letter && input) teamNames[letter.textContent] = input.value.trim();
+    });
+    if (currentId) dbUpdate(sessionPath(currentId), { teamNames: teamNames || {} });
+
+    const letters = ['A','B','C','D','E','F','G','H'].slice(0, currentAssignSize || 0);
+    const operationalSteps = cl.steps.filter(s => s.type === 'step');
+    const total = operationalSteps.length;
+    const done = (stepChecks || []).filter(v => v === true).length;
+    const statusText = isActiveMap[currentId] === 'done' ? 'הושלמה' : (isActiveMap[currentId] === 'active' ? 'פעילה' : 'לא פעילה');
+    const reportTime = formatDateForReport(new Date());
+    const missionTime = missionClock ? missionClock.textContent : formatClockMs(getCurrentClockElapsed());
+
+    let stepNumber = 1;
+    const stepRows = cl.steps.map((step, idx) => {
+      if (step.type === 'separator') {
+        return '<tr class="separator"><td colspan="5"></td></tr>';
+      }
+      if (step.type === 'captain') {
+        return '<tr class="captain"><td colspan="5">הערת מפקד: ' + step.text + '</td></tr>';
+      }
+      const checked = !!stepChecks[idx];
+      const roles = stepAssignments[idx] || '';
+      const row = '<tr>' +
+        '<td>' + (stepNumber++) + '</td>' +
+        '<td class="' + (checked ? 'ok' : 'no') + '">' + (checked ? 'בוצע' : 'לא בוצע') + '</td>' +
+        '<td>' + step.text + '</td>' +
+        '<td dir="ltr">' + escapeHtml(roles || '-') + '</td>' +
+        '<td>' + escapeHtml(stepOwners[idx] || '') + '</td>' +
+        '</tr>';
+      return row;
+    }).join('');
+
+    const teamRows = letters.map(L => '<tr><td dir="ltr">' + L + '</td><td>' + escapeHtml((teamNames && teamNames[L]) || '') + '</td></tr>').join('');
+
+    const html = '<!DOCTYPE html>' +
+'<html lang="he" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+'<title>דו&quot;ח משימה - ' + escapeHtml(cl.title) + '</title>' +
+'<style>' +
+'body{font-family:Arial,"Segoe UI",sans-serif;direction:rtl;margin:24px;color:#111;background:#fff;}' +
+'h1{margin:0 0 8px;color:#0a2a6a;} h2{margin-top:24px;color:#0a2a6a;border-bottom:2px solid #0a2a6a;padding-bottom:6px;}' +
+'.meta{display:grid;grid-template-columns:180px 1fr;gap:6px 12px;max-width:760px;margin-top:14px;}' +
+'.label{font-weight:800;color:#333}.value{font-weight:600}.ok{color:#008000;font-weight:900}.no{color:#b00020;font-weight:900}' +
+'table{width:100%;border-collapse:collapse;margin-top:10px;} th,td{border:1px solid #999;padding:8px;vertical-align:top;} th{background:#e3f2fd;color:#0a2a6a;} tr.captain td{background:#ffeb3b;color:#000;font-weight:800;} tr.separator td{border:none;border-bottom:3px solid #ffd600;height:10px;padding:0;}' +
+'.footer{margin-top:26px;font-size:12px;color:#555;} @media print{body{margin:12mm}.no-print{display:none}}' +
+'</style></head><body>' +
+'<h1>דו&quot;ח משימה</h1>' +
+'<div class="meta">' +
+'<div class="label">משימה</div><div class="value">' + escapeHtml(cl.title) + '</div>' +
+'<div class="label">סטטוס</div><div class="value">' + escapeHtml(statusText) + '</div>' +
+'<div class="label">תאריך הפקה</div><div class="value">' + escapeHtml(reportTime) + '</div>' +
+'<div class="label">זמן משימה</div><div class="value" dir="ltr">' + escapeHtml(missionTime) + '</div>' +
+'<div class="label">התקדמות</div><div class="value" dir="ltr">' + done + ' / ' + total + '</div>' +
+'<div class="label">גודל צוות</div><div class="value" dir="ltr">' + escapeHtml(currentAssignSize || '') + '</div>' +
+'</div>' +
+'<h2>צוות</h2><table><thead><tr><th>תפקיד</th><th>שם</th></tr></thead><tbody>' + teamRows + '</tbody></table>' +
+'<h2>רשימת ביצוע</h2><table><thead><tr><th>#</th><th>סטטוס</th><th>פעולה</th><th>ציוות</th><th>מבצע</th></tr></thead><tbody>' + stepRows + '</tbody></table>' +
+'<div class="footer">Generated by Checklist System - Build Version 1.0.1</div>' +
+'</body></html>';
+
+    const safeTitle = (cl.title || 'mission').replace(/[\\/:*?"<>|\s]+/g, '-');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mission-report-' + safeTitle + '-' + new Date().toISOString().slice(0,10) + '.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function updateCommanderButton() {
@@ -2726,6 +3186,8 @@ function renderRoleBanner() {
     document.querySelectorAll('#assign-extra button').forEach(btn => {
       btn.disabled = !isCmd;
     });
+
+    updateTeamButtonState();
 
     if (hasCommander) commanderButton.classList.remove('commander-off');
     else commanderButton.classList.add('commander-off');
