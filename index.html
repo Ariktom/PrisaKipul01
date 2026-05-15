@@ -7,16 +7,6 @@
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js">
 
-
-
-
-
-
-
-
-
-
-
 (function setupReportButtonLockObserver(){
   function start() {
     try {
@@ -55,6 +45,7 @@
 
 function getCurrentMissionKeyForReport() {
   try {
+    if (typeof currentId !== 'undefined' && currentId) return currentId;
     if (typeof currentChecklist !== 'undefined' && currentChecklist) return currentChecklist;
     if (typeof currentChecklistKey !== 'undefined' && currentChecklistKey) return currentChecklistKey;
     if (typeof currentMission !== 'undefined' && currentMission) return currentMission;
@@ -74,10 +65,16 @@ function reportProgressTextIsComplete(txt) {
 }
 
 function isMissionCompleteForReportButton() {
+  var key = getCurrentMissionKeyForReport();
+
+  // Actual app state: this is what turns the lamp/dot green.
+  try {
+    if (key && typeof isActiveMap !== 'undefined' && isActiveMap && isActiveMap[key] === 'done') return true;
+  } catch(e) {}
+
   var toolbarStatus = document.getElementById('toolbar-status');
   if (toolbarStatus && reportProgressTextIsComplete(toolbarStatus.textContent)) return true;
 
-  var key = getCurrentMissionKeyForReport();
   if (key) {
     var tileStatus = document.getElementById('status-' + key);
     if (tileStatus && reportProgressTextIsComplete(tileStatus.textContent)) return true;
@@ -89,15 +86,17 @@ function isMissionCompleteForReportButton() {
   var lamp = document.getElementById('toolbar-lamp');
   if (lamp && lamp.classList && lamp.classList.contains('done')) return true;
 
-  var content = document.getElementById('checklist-content');
-  if (content) {
-    var boxes = Array.prototype.slice.call(content.querySelectorAll('input[type="checkbox"].task-checkbox'));
-    var operational = boxes.filter(function(cb) {
-      var row = cb.closest('.task-row');
-      return row && !row.classList.contains('captain-row');
-    });
-    if (operational.length > 0 && operational.every(function(cb){ return cb.checked; })) return true;
-  }
+  // Final fallback: count only operational checklist steps by original checklist data,
+  // not by DOM/captain rows.
+  try {
+    if (key && typeof checklists !== 'undefined' && checklists[key] && typeof stepChecks !== 'undefined') {
+      var operationalIndexes = [];
+      checklists[key].steps.forEach(function(s, idx) {
+        if (s.type === 'step') operationalIndexes.push(idx);
+      });
+      if (operationalIndexes.length > 0 && operationalIndexes.every(function(idx) { return stepChecks[idx] === true; })) return true;
+    }
+  } catch(e) {}
 
   return false;
 }
@@ -145,6 +144,16 @@ function refreshTeamReportButton() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();
+
+
+/* ===== FINAL CURRENTID REPORT FIX ===== */
+document.addEventListener('change', function(e) {
+  if (e.target && e.target.classList && e.target.classList.contains('task-checkbox')) {
+    setTimeout(function() {
+      if (typeof refreshTeamReportButton === 'function') refreshTeamReportButton();
+    }, 250);
+  }
+}, true);
 
 </script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
