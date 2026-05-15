@@ -46,28 +46,67 @@
 })();
 
 
-function isLastOperationalStepCheckedForReport() {
+
+
+
+
+
+
+
+function getCurrentMissionKeyForReport() {
+  try {
+    if (typeof currentChecklist !== 'undefined' && currentChecklist) return currentChecklist;
+    if (typeof currentChecklistKey !== 'undefined' && currentChecklistKey) return currentChecklistKey;
+    if (typeof currentMission !== 'undefined' && currentMission) return currentMission;
+    if (typeof activeChecklist !== 'undefined' && activeChecklist) return activeChecklist;
+    if (typeof selectedChecklist !== 'undefined' && selectedChecklist) return selectedChecklist;
+  } catch(e) {}
+  return null;
+}
+
+function reportProgressTextIsComplete(txt) {
+  txt = String(txt || '').trim();
+  var m = txt.match(/(\d+)\s*\/\s*(\d+)/);
+  if (!m) return false;
+  var done = parseInt(m[1], 10);
+  var total = parseInt(m[2], 10);
+  return total > 0 && done >= total;
+}
+
+function isMissionCompleteForReportButton() {
+  var toolbarStatus = document.getElementById('toolbar-status');
+  if (toolbarStatus && reportProgressTextIsComplete(toolbarStatus.textContent)) return true;
+
+  var key = getCurrentMissionKeyForReport();
+  if (key) {
+    var tileStatus = document.getElementById('status-' + key);
+    if (tileStatus && reportProgressTextIsComplete(tileStatus.textContent)) return true;
+
+    var dot = document.getElementById('dot-' + key);
+    if (dot && dot.classList && dot.classList.contains('dot-done-green')) return true;
+  }
+
+  var lamp = document.getElementById('toolbar-lamp');
+  if (lamp && lamp.classList && lamp.classList.contains('done')) return true;
+
   var content = document.getElementById('checklist-content');
-  if (!content) return false;
+  if (content) {
+    var boxes = Array.prototype.slice.call(content.querySelectorAll('input[type="checkbox"].task-checkbox'));
+    var operational = boxes.filter(function(cb) {
+      var row = cb.closest('.task-row');
+      return row && !row.classList.contains('captain-row');
+    });
+    if (operational.length > 0 && operational.every(function(cb){ return cb.checked; })) return true;
+  }
 
-  var rows = Array.prototype.slice.call(content.querySelectorAll('.task-row'));
-  var stepRows = rows.filter(function(row) {
-    return !row.classList.contains('captain-row') && row.querySelector('input[type="checkbox"].task-checkbox');
-  });
-
-  if (!stepRows.length) return false;
-
-  var lastRow = stepRows[stepRows.length - 1];
-  var lastCheckbox = lastRow.querySelector('input[type="checkbox"].task-checkbox');
-  return !!(lastCheckbox && lastCheckbox.checked);
+  return false;
 }
 
 function refreshTeamReportButton() {
   var btn = document.getElementById('team-report-btn') || document.querySelector('.team-report-btn');
   if (!btn) return;
 
-  var ready = isLastOperationalStepCheckedForReport();
-
+  var ready = isMissionCompleteForReportButton();
   btn.disabled = !ready;
 
   if (ready) {
@@ -75,31 +114,31 @@ function refreshTeamReportButton() {
     btn.title = '';
   } else {
     btn.classList.remove('report-active');
-    btn.title = 'הפקת דו"ח אפשרית רק לאחר סימון הצעד האחרון';
+    btn.title = 'הפקת דו"ח אפשרית רק לאחר השלמת המשימה';
   }
 }
 
-(function setupLastStepReportWatcher(){
+(function setupReportButtonCompletionWatcher(){
   function start() {
     try {
       refreshTeamReportButton();
 
-      var content = document.getElementById('checklist-content');
-      if (content) {
-        content.addEventListener('change', function(e) {
-          if (e.target && e.target.matches('input[type="checkbox"].task-checkbox')) {
-            setTimeout(refreshTeamReportButton, 30);
-          }
-        }, true);
+      document.addEventListener('click', function(){ setTimeout(refreshTeamReportButton, 120); }, true);
+      document.addEventListener('change', function(){ setTimeout(refreshTeamReportButton, 120); }, true);
+      document.addEventListener('input', function(){ setTimeout(refreshTeamReportButton, 120); }, true);
 
-        if (window.MutationObserver) {
-          new MutationObserver(function(){ setTimeout(refreshTeamReportButton, 50); })
-            .observe(content, { childList:true, subtree:true, attributes:true, attributeFilter:['class', 'checked'] });
-        }
+      if (window.MutationObserver) {
+        var observer = new MutationObserver(function(){ setTimeout(refreshTeamReportButton, 100); });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true,
+          attributeFilter: ['class', 'style', 'checked']
+        });
       }
 
-      document.addEventListener('click', function(){ setTimeout(refreshTeamReportButton, 80); }, true);
-      setInterval(refreshTeamReportButton, 500);
+      setInterval(refreshTeamReportButton, 300);
     } catch(e) {}
   }
 
@@ -1205,7 +1244,8 @@ function refreshTeamReportButton() {
 
 
 
-/* ===== REPORT BUTTON: GREY UNTIL LAST STEP CHECKED ===== */
+
+/* ===== REPORT BUTTON: GREY UNTIL MISSION COMPLETE ===== */
 .team-report-btn,
 #team-report-btn,
 .team-report-btn *,
@@ -3132,11 +3172,12 @@ function renderRoleBanner() {
   }
 
   function generateMissionReport() {
-  if (!isLastOperationalStepCheckedForReport()) {
-    alert('ניתן להפיק דו"ח משימה רק לאחר סימון הצעד האחרון');
+  if (!isMissionCompleteForReportButton()) {
+    alert('ניתן להפיק דו"ח משימה רק לאחר השלמת המשימה');
     refreshTeamReportButton();
     return;
   }
+
 
     if (!currentId || !isCommander()) return;
     const cl = checklists[currentId];
